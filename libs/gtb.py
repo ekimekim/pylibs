@@ -1,6 +1,8 @@
 
 """Tools for inspecting running greenlets and getting tracebacks"""
 
+__REQUIRES__ = ['greenlet']
+
 import gc
 import traceback
 

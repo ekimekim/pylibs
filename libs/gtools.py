@@ -1,6 +1,8 @@
 
 """Miscellaneous tools for debugging and working with gevent"""
 
+__REQUIRES__ = ['gevent']
+
 import signal
 
 import gevent.backdoor
