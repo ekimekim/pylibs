@@ -1,3 +1,6 @@
+
+"""A simple parser for command line args, which passes them as args and kwargs to a main function"""
+
 from functools import wraps
 import sys
 

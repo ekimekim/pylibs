@@ -1,3 +1,6 @@
+
+"""A context manager for changing termios attributes"""
+
 import termios
 import sys
 from itertools import count

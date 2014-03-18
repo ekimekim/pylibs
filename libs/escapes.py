@@ -1,5 +1,6 @@
 
-# ANSI Terminal Escape Sequences 
+"""A collection of definitions of ANSI control codes for terminals"""
+
 ESC = "\033" # escape character for terminal
 CSI = ESC + "[" # Control Sequence Initiator
 
@@ -23,16 +24,16 @@ SCROLL_DOWN = CSI + "D"
 # Formatting 
 BOLD = CSI + "1m"
 UNFORMAT = CSI + "0m"
-FORECOLOUR = lambda x: CSI + "3" + str(x) + "m"
-BACKCOLOUR = lambda x: CSI + "4" + str(x) + "m"
+FORECOLOUR = lambda colour: CSI + "3" + str(colour) + "m"
+BACKCOLOUR = lambda colour: CSI + "4" + str(colour) + "m"
 INVERTCOLOURS = CSI + "7m"
 
-BLACK =  "0"
-RED =    "1"
-GREEN =  "2"
+BLACK  = "0"
+RED    = "1"
+GREEN  = "2"
 YELLOW = "3"
-BLUE =   "4"
+BLUE   = "4"
 PURPLE = "5"
-CYAN =   "6"
-WHITE =  "7"
+CYAN   = "6"
+WHITE  = "7"
 DEFAULT_COLOUR = "9"
