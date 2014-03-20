@@ -25,7 +25,8 @@ def greenlet_tb(g):
 		lineno = frame.f_lineno
 		funcname = frame.f_code.co_name
 		try:
-			line = open(filename).read().split('\n')[lineno-1].strip()
+			with open(filename) as f:
+				line = f.read().split('\n')[lineno-1].strip()
 		except (IOError, KeyError):
 			line = None
 		stack.append((filename, lineno, funcname, line))
