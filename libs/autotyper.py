@@ -7,6 +7,7 @@ Requires the xte utility, provided by the "xautomation" package on most distribu
 import sys
 from subprocess import Popen, PIPE
 
+AI_HACK = True
 
 def to_commands(s):
 	ret = []
@@ -26,6 +27,9 @@ def to_commands(s):
 			if c not in keymap:
 				raise ValueError("Cannot handle character: {!r}".format(c))
 			ret.append(keymap[c])
+			if AI_HACK and c == '\n':
+				# hack to work around auto-indenting editors
+				ret.append("key Home")
 	return ret
 
 
