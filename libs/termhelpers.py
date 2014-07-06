@@ -1,8 +1,9 @@
 
-"""A context manager for changing termios attributes"""
-
-import termios
+import fcntl
+import signal
+import struct
 import sys
+import termios
 from itertools import count
 
 
@@ -53,3 +54,34 @@ class TermAttrs(object):
 	def __exit__(self, *exc_info):
 		termios.tcsetattr(self.oldattrs, self.fd, self.when)
 
+
+_size_cache = None
+def termsize(cache=True):
+	"""Returns the size (columns, rows) of the terminal associated with sys.stdout.
+	Note that this function will set up a SIGWINCH handler on first run.
+	This should be harmless, since it will call any handler that was already registered.
+	Under normal circumstances, the function will only actually fetch the size on first run
+	or SIGWINCH. To override this behaviour and force it to refresh the data, pass cache=False.
+	"""
+	old_handler = None
+
+	def get_termsize():
+		winsize_t = 'HHHH'
+		winsize = struct.pack(winsize_t, 0, 0, 0, 0)
+		winsize = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, winsize)
+		rows, columns, _, _ = struct.unpack(winsize_t, winsize)
+		global _size_cache
+		_size_cache = columns, rows
+
+	def termsize_handler(frame, signal):
+		get_termsize()
+		if old_handler is not None:
+			old_handler()
+
+	if _size_cache is None:
+		old_handler = signal.signal(signal.SIGWINCH, termsize_handler)
+
+	if not cache or _size_cache is None:
+		get_termsize()
+
+	return _size_cache
