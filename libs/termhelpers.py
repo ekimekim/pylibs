@@ -20,7 +20,7 @@ class TermAttrs(object):
 		self.when = when
 
 	@classmethod
-	def modify(include=(0,0,0,0), exclude=(0,0,0,0), fd=None, *args, **kwargs):
+	def modify(cls, include=(0,0,0,0), exclude=(0,0,0,0), fd=None, *args, **kwargs):
 		"""Alternate creation function, allowing you to base changes off current term attrs.
 		include and exclude should be 4-tuples of (iflag, oflag, cflag, lflag).
 		All values in include will be set.
@@ -31,8 +31,8 @@ class TermAttrs(object):
 		if fd is None: fd = sys.stdin.fileno()
 		attrs = termios.tcgetattr(fd)
 		for i, e, index in zip(include, exclude, count()):
-			attrs[index] |= include
-			attrs[index] &= ~exclude
+			attrs[index] |= i
+			attrs[index] &= ~e
 		return TermAttrs(attrs, fd, *args, **kwargs)
 
 	@classmethod
@@ -49,10 +49,10 @@ class TermAttrs(object):
 
 	def __enter__(self):
 		self.oldattrs = termios.tcgetattr(self.fd)
-		termios.tcsetattr(self.attrs, self.fd, self.when)
+		termios.tcsetattr(self.fd, self.when, self.attrs)
 
 	def __exit__(self, *exc_info):
-		termios.tcsetattr(self.oldattrs, self.fd, self.when)
+		termios.tcsetattr(self.fd, self.when, self.oldattrs)
 
 
 _size_cache = None
