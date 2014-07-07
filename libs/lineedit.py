@@ -3,8 +3,9 @@ import sys
 import string
 
 import escapes
-from termhelpers import TermAttrs
+from termhelpers import TermAttrs, termsize
 
+__REQUIRES__ = ['escapes', 'termhelpers']
 
 def get_termattrs(fd=None, **kwargs):
 	"""Return the TermAttrs object to use. Passes args to term attrs.
@@ -73,14 +74,32 @@ class LineEditing(object):
 		"""
 		return self.input_file.read(1)
 
+	def get_width(self):
+		columns, rows = termsize()
+		return columns
+
 	def refresh(self):
 		"""Display current editing line"""
+		head = self.head
 		tail = self.tail or ' '
+
+		width = self.get_width()
+		max_head = width - 2
+		if max_head <= 0:
+			raise ValueError("Cannot display line: terminal too narrow")
+
+		# if line is too long, strip from left to ensure there's room for cursor at the end
+		head = head[-max_head:]
+		# if line is still too long, cut off tail
+		max_tail = width - len(head)
+		assert max_tail >= 2, "logic error: max_tail = {!r}".format(max_tail)
+		tail = tail[:max_tail]
+
 		self.output.write(
 			  escapes.SAVE_CURSOR
-			+ escapes.SET_CURSOR(1,999)
+			+ escapes.set_cursor(1,999)
 			+ escapes.CLEAR_LINE
-			+ self.head
+			+ head
 			+ escapes.INVERTCOLOURS + tail[0] + escapes.UNFORMAT
 			+ tail[1:]
 			+ escapes.LOAD_CURSOR
@@ -162,7 +181,7 @@ class LineEditing(object):
 
 	def __exit__(self, *exc_info):
 		while self.active_context_mgrs:
-			mgr = self.context_mgrs.pop()
+			mgr = self.active_context_mgrs.pop()
 			mgr.__exit__(*exc_info)
 
 
@@ -228,3 +247,14 @@ def down(head, tail, obj):
 	obj.history_pos -= 1
 	return obj.history[obj.history_pos], ''
 
+
+if __name__ == '__main__':
+	# basic test
+	editor = LineEditing()
+	try:
+		with editor:
+			while True:
+				line = editor.readline()
+				print repr(line)
+	except EOFError:
+		pass
