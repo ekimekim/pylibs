@@ -27,29 +27,8 @@ def with_argv(fn):
 
 	@wraps(fn)
 	def _with_argv():
-		args = []
-		kwargs = {}
-		argv = sys.argv[1:][::-1]
-
-		while argv:
-			arg = argv.pop()
-			if arg.startswith('--'):
-				arg = arg[2:]
-			elif arg.startswith('-'):
-				if len(arg) != 2 and arg[2] != '=': # rule out cases '-x' and '-x=value'
-					argv.append('-' + arg[2:]) # thus '-xyz' becomes '-yz'
-					arg = arg[1]
-				else:
-					arg = arg[1:]
-			else:
-				args.append(arg)
-				continue
-			# We have a flag or key=value
-			if '=' in arg:
-				k, v = arg.split('=', 1)
-			else:
-				k, v = arg, True
-			kwargs[k] = v
+		argv = sys.argv[1:]
+		args, kwargs = parse_argv(argv)
 
 		try:
 			ret = fn(*args, **kwargs)
@@ -61,6 +40,35 @@ def with_argv(fn):
 		sys.exit(0 if ret is None else ret)
 
 	return _with_argv
+
+def parse_argv(argv):
+	"""Parse args and return (positionals, options)"""
+
+	argv = argv[::-1]
+	positionals = []
+	options = {}
+
+	while argv:
+		arg = argv.pop()
+		if arg.startswith('--'):
+			arg = arg[2:]
+		elif arg.startswith('-'):
+			if len(arg) != 2 and arg[2] != '=': # rule out cases '-x' and '-x=value'
+				argv.append('-' + arg[2:]) # thus '-xyz' becomes '-yz'
+				arg = arg[1]
+			else:
+				arg = arg[1:]
+		else:
+			positionals.append(arg)
+			continue
+		# We have a flag or key=value
+		if '=' in arg:
+			k, v = arg.split('=', 1)
+		else:
+			k, v = arg, True
+		options[k] = v
+	return positionals, options
+
 
 
 if __name__=='__main__':
