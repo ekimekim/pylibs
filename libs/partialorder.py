@@ -5,7 +5,7 @@ def partial_ordering(cls):
 	"""Class decorator. Similar to functools.total_ordering, except it
 	is used to define partial orderings
 	(ie. it is possible that x is niether greater than, equal to or less than y).
-	It assumes the present of a <= (__le__) and >= (__ge__) method, but nothing else.
+	It assumes the presence of a <= (__le__) and >= (__ge__) method, but nothing else.
 	"""
 	def __lt__(self, other): return self <= other and not self >= other
 	def __gt__(self, other): return self >= other and not self <= other
