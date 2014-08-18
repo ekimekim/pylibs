@@ -75,7 +75,7 @@ def termsize(cache=True):
 
 	def termsize_handler(frame, signal):
 		get_termsize()
-		if old_handler is not None:
+		if old_handler is not None and callable(old_handler):
 			old_handler()
 
 	if _size_cache is None:
