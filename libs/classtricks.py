@@ -73,6 +73,30 @@ class classproperty(object):
 		return self.fn(cls)
 
 
+class mixedmethod(object):
+	"""A decorator for methods such that they can act like a classmethod when called via the class,
+	or an instance method when bound to an instance. For example:
+		>>> class MyCls(object):
+		...   x = 1
+		...   @mixedmethod
+		...   def foo(self):
+		...     return self.x
+		>>> print MyCls.foo()
+		1
+		>>> mycls = MyCls()
+		>>> mycls.x = 2
+		>>> print mycls.foo()
+		2
+	"""
+
+	def __init__(self, fn):
+		self.fn = fn
+
+	def __get__(self, instance, cls):
+		arg = cls if instance is None else instance
+		return lambda *args, **kawrgs: self.fn(arg, *args, **kwargs)
+
+
 class dotdict(dict):
     def __getattr__(self, attr):
         if attr in self:
