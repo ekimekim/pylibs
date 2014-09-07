@@ -30,9 +30,9 @@ def with_parent(cls, callback=None):
 	Note: This will not work if the wrapped value is masked by instance variables or other
 	classes before it in the mro.
 	"""
+	if not callback: callback = lambda cls, parent: cls(parent)
 	class _with_parent_wrapper(object):
 		def __get__(self, parent, parent_cls):
-			if not callback: callback = lambda cls, parent: cls(parent)
 			replacement = callback(cls, parent)
 			for k, v in get_resolved_dict(parent).items():
 				if isinstance(v, _with_parent_wrapper):
@@ -94,7 +94,7 @@ class mixedmethod(object):
 
 	def __get__(self, instance, cls):
 		arg = cls if instance is None else instance
-		return lambda *args, **kawrgs: self.fn(arg, *args, **kwargs)
+		return lambda *args, **kwargs: self.fn(arg, *args, **kwargs)
 
 
 class dotdict(dict):
