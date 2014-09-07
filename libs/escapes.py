@@ -17,7 +17,7 @@ TYPE_CURSOR = CSI + "6n" # Writes CSI <row> ";" <column> "R" to stdin
 def set_cursor(x=None, y=None):
 	"""Set cursor to (column, row). If either axis omitted or None, it doesn't move."""
 	tostr = lambda val: '' if val is None else str(val)
-	return "{CSI}{y};{x}H".format(CSI=CSI, x=x, y=y)
+	return "{CSI}{y};{x}H".format(CSI=CSI, x=tostr(x), y=tostr(y))
 
 # Cursor Movement
 UP, DOWN, LEFT, RIGHT = "ABCD"
