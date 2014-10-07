@@ -3,6 +3,9 @@
 """A collection of simple tricks and helper functions for working with classes"""
 
 
+from weakref import WeakKeyDictionary, WeakSet
+
+
 def gencls(*bases, **extras):
 	"""Define a new class inline (ie. class version of "lambda").
 	Takes classes to use as base class for args, and any extra attrs to set as kwargs.
@@ -128,3 +131,27 @@ class aliasdict(dict):
         if item in self.aliases: return self.aliases[item] in self
         return super(aliasdict, self).__contains__(item)
 
+
+class TracksInstances(object):
+	"""A mixin that lets you easily track instances of subclasses of this object.
+	A set of all active (not garbage collected) instances of a class can be retrieved
+	with cls.get_instances(). This includes instances of subclasses by default - you can pass the paramter
+	exclusive=True to override this."""
+
+	_instances = WeakKeyDictionary() # maps cls to set of instances
+
+	def __new__(cls, *args, **kwargs):
+		instances = cls._instances.setdefault(cls, WeakSet())
+		instance = super(TracksInstances, cls).__new__(*args, **kwargs)
+		instances.add(instance)
+		return instance
+
+	@classmethod
+	def get_instances(cls, exclusive=False):
+		"""Get a set of instances that exist for this class or subclasses.
+		If exculsive, restrict output to only instances strictly of this class."""
+		result = cls._instances.setdefault(cls, WeakSet())
+		if not exclusive:
+			for subcls in cls.__subclasses__():
+				result |= subcls.get_instances()
+		return result
