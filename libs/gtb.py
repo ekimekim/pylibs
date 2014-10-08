@@ -5,22 +5,35 @@ __REQUIRES__ = ['greenlet']
 
 import gc
 import traceback
+import sys
 
 from greenlet import greenlet
 
-def greenlet_tb(g):
-	"""Takes a greenlet and returns a traceback string, or None if not running.
-	Treats the currently active greenlet as a special case, but still returns the correct result.
-	"""
+def get_stack(g):
+	"""Returns a list of frames, with the innermost frame last, or None if not running."""
 	frame = g.gr_frame
 	if not frame:
 		current = greenlet.getcurrent()
 		if g is not current:
 			return None # not running
-		# the current greenlet has no saved frame object, use traceback.format_stack instead.
-		return ''.join(traceback.format_stack())
+		# the current greenlet has no saved frame object, use sys._getframe() instead.
+		frame = sys._getframe()
+
 	stack = []
 	while frame:
+		stack.append(frame)
+		frame = frame.f_back
+	return stack[::-1]
+
+
+def get_tb(g):
+	"""Takes a greenlet and returns a traceback string, or None if not running.
+	"""
+	stack = get_stack(g)
+	if not stack: return
+
+	tb = []
+	for frame in stack:
 		filename = frame.f_code.co_filename
 		lineno = frame.f_lineno
 		funcname = frame.f_code.co_name
@@ -29,19 +42,19 @@ def greenlet_tb(g):
 				line = f.read().split('\n')[lineno-1].strip()
 		except (IOError, KeyError):
 			line = None
-		stack.append((filename, lineno, funcname, line))
-		frame = frame.f_back
-	stack = stack[::-1]
-	return ''.join(traceback.format_list(stack))
+		tb.append((filename, lineno, funcname, line))
+	return ''.join(traceback.format_list(tb))
+
 
 def get_greenlets():
 	"""Fetch all greenlet instances from the garbage collector"""
 	return [o for o in gc.get_objects() if isinstance(o, greenlet)]
 
+
 def print_greenlet_tbs():
 	"""Print all greenlets along with a traceback, or a short diagnostic (eg. <started but not running>)."""
 	for g in get_greenlets():
-		tb = greenlet_tb(g).rstrip('\n')
+		tb = get_tb(g).rstrip('\n')
 		if not tb:
 			if not g.started:
 				tb = "<not started>"
