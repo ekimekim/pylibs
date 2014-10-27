@@ -1,17 +1,84 @@
 
-"""Miscellaneous tools for debugging and working with gevent"""
+"""Miscellaneous helpers and tools for using and debugging gevent"""
 
 __REQUIRES__ = ['gevent']
 
+
 import signal
 
+import gevent
+import gevent.queue
+import gevent.event
+import gevent.pool
 import gevent.backdoor
-from gevent import sleep
+
 
 def backdoor(port=1234):
 	"""Start up a backdoor server on the local interface."""
 	backdoor = gevent.backdoor.BackdoorServer(('localhost', port))
 	backdoor.start()
+
+
+def gmap(func, iterable, lazy=False):
+	"""As per map(), but each func is run in a seperate greenlet. If lazy, as per imap() instead."""
+	results = gevent.pool.Group().imap(func, iterable)
+	if not lazy: results = list(results)
+	return results
+
+
+def gmap_unordered(func, iterable):
+	"""As per gmap(), but always lazy and yields (arg, result) in order of completion."""
+	iterable = list(iterable)
+	queue = gevent.queue.Queue(len(iterable))
+	def gen_callback(arg):
+		def callback(g):
+			queue.put((arg, g))
+		return callback
+	for arg in iterable:
+		g = gevent.spawn(func, arg)
+		g.link(gen_callback(arg))
+	seen = 0
+	while seen < len(iterable):
+		arg, g = queue.get()
+		seen += 1
+		yield arg, g.get()
+
+
+def get_first(*args):
+	"""Begin executing all the given functions, returning whichever finishes first.
+	All remaining greenlets are killed.
+	If only one arg is given, it is treated as an iterable containing callables.
+	Otherwise each arg should be callable.
+	"""
+	if not args:
+		raise TypeError("Must give at least one argument to get_first()")
+	if len(args) == 1:
+		args, = args
+
+	result = gevent.event.AsyncResult()
+	def _get_first_wrapper(fn):
+		try:
+			result.set(fn())
+		except Exception as ex:
+			result.set_exception(ex)
+
+	group = gevent.pool.Group()
+	group.map_async(_get_first_wrapper, args)
+	result.wait()
+	group.kill(block=False)
+	return result.get()
+
+
+def get_all(*args):
+	"""Execute all the given functions, blocking until they all return.
+	The return values of each function are returned in the same order.
+	If only one arg is given, it is treated as an iterable containing callables.
+	Otherwise each arg should be callable.
+	"""
+	if len(args) == 1:
+		args, = args
+	return gmap(lambda fn: fn(), args)
+
 
 def starve_test(callback=None, timeout=2, interval=0.1):
 	"""Keep a SIGALRM perpetually pending...as long as we get rescheduled in a timely manner.
@@ -34,4 +101,4 @@ def starve_test(callback=None, timeout=2, interval=0.1):
 	signal.signal(signal.SIGALRM, boom)
 	while 1:
 		signal.alarm(2)
-		sleep(0.1)
+		gevent.sleep(0.1)
