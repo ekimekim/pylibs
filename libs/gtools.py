@@ -80,6 +80,32 @@ def get_all(*args):
 	return gmap(lambda fn: fn(), args)
 
 
+def any(*args):
+	"""Executes all the given functions, returning as soon as we can determine if any of the results are True
+	If only one arg is given, it is treated as an iterable containing callables.
+	Otherwise each arg should be callable.
+	"""
+	if len(args) == 1:
+		args, = args
+	for result in gmap_unordered(lambda fn: fn(), args):
+		if result:
+			return True
+	return False
+
+
+def all(*args):
+	"""Executes all the given functions, returning as soon as we can determine if all of the results are True
+	If only one arg is given, it is treated as an iterable containing callables.
+	Otherwise each arg should be callable.
+	"""
+	if len(args) == 1:
+		args, = args
+	for result in gmap_unordered(lambda fn: fn(), args):
+		if not result:
+			return False
+	return True
+
+
 def starve_test(callback=None, timeout=2, interval=0.1):
 	"""Keep a SIGALRM perpetually pending...as long as we get rescheduled in a timely manner.
 	timeout: How long we can be not scheduled before triggering.
