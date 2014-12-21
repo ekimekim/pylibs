@@ -154,7 +154,7 @@ class TracksInstances(object):
 
 	def __new__(cls, *args, **kwargs):
 		instances = cls._instances.setdefault(cls, WeakSet())
-		instance = super(TracksInstances, cls).__new__(*args, **kwargs)
+		instance = super(TracksInstances, cls).__new__(cls, *args, **kwargs)
 		instances.add(instance)
 		return instance
 
