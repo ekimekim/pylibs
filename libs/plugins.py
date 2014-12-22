@@ -243,11 +243,12 @@ class Plugin(TracksInstances):
 		modulemanager.unload(name)
 
 	@classmethod
-	def reload(cls, target, safe=True):
+	def reload(cls, target, load_paths=[], safe=True):
 		"""Unload then load the specified module. Args are as per unload().
 		Any enabled plugins will be disabled, then re-enabled after.
 		Note that in the event of a failure, the module may or may not be loaded, and plugins may or may
 		not be enabled.
+		load_paths is as per load().
 		safe is as per unload().
 		Returns new module.
 		"""
@@ -260,7 +261,7 @@ class Plugin(TracksInstances):
 		enabled = (lambda: {plugin.name: [instance.args for instance in plugin.enabled]
 		                    for plugin in cls.plugins_of(name)})()
 		cls.unload(name, safe=safe) # also disables
-		module = cls.load(name)
+		module = cls.load(name, load_paths)
 		for plugin, enabled_args in enabled.items():
 			for args in enabled_args:
 				cls.enable(plugin, *args)
