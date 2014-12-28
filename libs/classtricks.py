@@ -13,14 +13,13 @@ def gencls(*bases, **extras):
 	return type(','.join(bases), bases, extras)
 
 
-_issubclass = issubclass # save the builtin
 def issubclass(subcls, supercls):
 	"""As per the builtin issubclass(), but will simply return False if either arg is not suitable
 	(eg. if subcls is not a class), instead of raising TypeError.
 	This is more desired behavour in certain situations, and should not adversely affect existing code.
 	"""
 	try:
-		return _issubclass(subcls, supercls)
+		return __builtins__['issubclass'](subcls, supercls)
 	except TypeError:
 		return False
 
