@@ -24,14 +24,22 @@ def issubclass(subcls, supercls):
 		return False
 
 
-def get_resolved_dict(instance):
-	"""Returns a fully-resolved __dict__ for an object.
+def get_resolved_dict(obj, cls=False):
+	"""Returns a fully-resolved __dict__ for an object or class.
 	ie. The result reflects what you would get for each key if you do a getattr on instance.
+	If cls=True, treat obj as a class, not an instance (ie. don't include attrs coming from type(obj))
+	Note that this function will not be fully correct in the presence of __slots__ or other weirdness,
+	and does not fetch the value returned by __get__ methods, instead returning the real object.
 	"""
 	d = {}
-	for cls in reversed(instance.__class__.mro()):
-		d.update(cls.__dict__)
-	d.update(instance.__dict__)
+	if not cls:
+		d.update(get_resolved_dict(type(obj), cls=True))
+	if isinstance(obj, type):
+		# type is weird as it is of its own type, we need to "manually bind" the .mro() instance method
+		mro = obj.mro(obj) if issubclass(obj, type) else obj.mro()
+		for supercls in reversed(mro):
+			d.update(supercls.__dict__)
+	d.update(obj.__dict__)
 	return d
 
 
