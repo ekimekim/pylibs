@@ -60,7 +60,7 @@ def unload(module, safe=True):
 	# we take care to match on all of id, type and name.
 	get_info = lambda m: (id(m), type(m), getattr(m, '__name__', None))
 	module_info = get_info(module)
-	del module
+	module = None
 	def find_module():
 		for obj in gc.get_objects():
 			if get_info(obj) == module_info:
