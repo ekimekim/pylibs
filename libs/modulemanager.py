@@ -53,6 +53,20 @@ def unload(module, safe=True):
 	except ValueError:
 		return # no action to take
 
+	# What we really want is to ensure that nothing still references anything defined by the module.
+	# Technically this is impossible, since importing a module can have arbitrary side effects entirely
+	# disassociated with the module.
+	# However, in practice, we can consider this to mean "has access to the module's globals".
+	# Unfortunately this is where we hit some problems. We ideally want to think of the module and its globals
+	# as one and the same - the user thinks in terms of modules, as does the python sys.modules and import
+	# abstractions. But they aren't. The globals, aka module.__dict__, are a seperate object and even if the module
+	# is gone, the globals may still exist.
+	# As a hacky workaround to get the behaviour we want, we introduce a backreference from the globals to the
+	# module object, tying its life to that of the globals.
+	# Yes, this means we introduce a reference loop, but since the globals generally already refer to objects
+	# that refer to them, this isn't much of a change.
+	module.__module__ = module
+
 	# we want to be able to undelete the module if not all references disappear,
 	# but we obviously can't hold on to our own reference (and modules can't be weakref'd)
 	# so we use a hack: Grab our id() now, and scan gc.get_objects() later.
@@ -71,11 +85,7 @@ def unload(module, safe=True):
 		del sys.modules[name]
 		if not safe:
 			return
-		module = find_module()
-		if module is None:
-			return
-		# ok, so it wasn't deleted immediately...let's try harder, find ref loops
-		gc.collect()
+		gc.collect() # this is needed as modules *will* contain a ref loop
 		module = find_module()
 		if module is None:
 			return
