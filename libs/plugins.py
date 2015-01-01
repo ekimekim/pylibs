@@ -237,9 +237,9 @@ class Plugin(TracksInstances):
 		name, module = cls._resolve_module(target)
 		if not module:
 			return
-		del module # we shouldn't be keeping a reference to it, we can work with name alone
 		for plugin in cls.plugins_of(name):
 			cls.disable_all(plugin, safe=safe)
+		module = plugin = None # wipe references
 		modulemanager.unload(name)
 
 	@classmethod
