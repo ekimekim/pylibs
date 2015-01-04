@@ -2,6 +2,7 @@
 """A simple parser for command line args, which passes them as args and kwargs to a main function"""
 
 from functools import wraps
+from collections import OrderedDict
 import sys
 
 
@@ -42,11 +43,12 @@ def with_argv(fn):
 	return _with_argv
 
 def parse_argv(argv):
-	"""Parse args and return (positionals, options)"""
+	"""Parse args and return (positionals, options)
+	Options is an OrderedDict."""
 
 	argv = argv[::-1]
 	positionals = []
-	options = {}
+	options = OrderedDict()
 
 	while argv:
 		arg = argv.pop()
