@@ -15,6 +15,8 @@ you need - for example:
 will give you something that acts like a normal black hole, but will answer True to isinstance(x, Foobar).
 """
 
+import sys
+
 
 class BlackHole(object):
 	# basics
