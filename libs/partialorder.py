@@ -11,8 +11,8 @@ def partial_ordering(cls):
 	def __gt__(self, other): return self >= other and not self <= other
 	def __eq__(self, other): return self >= other and self <= other
 
-	cls.__lt__ = __lt__
-	cls.__gt__ = __gt__
-	cls.__eq__ = __eq__
+	if not hasattr(cls, '__lt__'): cls.__lt__ = __lt__
+	if not hasattr(cls, '__gt__'): cls.__gt__ = __gt__
+	if not hasattr(cls, '__eq__'): cls.__eq__ = __eq__
 
 	return cls
