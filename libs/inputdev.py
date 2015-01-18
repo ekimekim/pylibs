@@ -10,6 +10,8 @@ Expects input devices to be available under /dev/input/ and readable
 
 import os
 import struct
+import select
+import errno
 
 
 # maps value to event type names. note that event type mask = (1 << value).
@@ -216,7 +218,15 @@ class InputDevice(object):
 
 	def read(self):
 		"""Reads an event and returns it."""
-		self._ensure_file()
+		while True:
+			try:
+				r, w, x = select.select([self.fileno()], [], [])
+			except OSError as ex:
+				if ex.errno != errno.EINTR:
+					raise
+			else:
+				if r:
+					break
 		data = self._file.read(InputEvent.size())
 		assert len(data) == InputEvent.size(), "Bad read from {}: Asked for {} bytes but got {!r}".format(self._file, InputEvent.size(), data)
 		return InputEvent(data)
