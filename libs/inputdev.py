@@ -43,7 +43,7 @@ class InputEvent(object):
 	def __init__(self, packed):
 		secs, usecs, type, self.code, self.value = struct.unpack(self.STRUCT_SPEC, packed)
 		self.time = secs + usecs * 1e-6
-		self.type = EVENT_TYPES[type]
+		self.type = EVENT_TYPES.get(type, '(unknown type {})'.format(type))
 
 	def __str__(self):
 		return "<{cls.__name__} {self.type} {self.code:x} = {self.value} @{self.time}>".format(
