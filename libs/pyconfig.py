@@ -93,12 +93,13 @@ class Config(dict):
 		"""Update config from given conf files, in order (ie. last overrides all others).
 		conf files should be python source files, which will be executed with this object
 		as their global namespace.
+		Note that user expansion is performed on the file paths.
 		For advanced operations (eg. bulk update or recursively calling from_file() on other files),
 		we set the global "config" to this object, avoiding the need for explicit globals() calls.
 		Note that errors in the sourced files *will* be allowed to raise.
 		"""
 		for conf_file in conf_files:
-			execfile(conf_file, self)
+			execfile(os.path.expanduser(conf_file), self)
 
 	def from_argv(self, argv=None, convert=True):
 		"""Update config from given command line args (default sys.argv, without progname) as follows:
