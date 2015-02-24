@@ -21,6 +21,10 @@ As a simple example case, a GetpassPinentry implementation is also provided.
 """
 
 
+class PinentryError(Exception):
+	pass
+
+
 class Pinentry(object):
 
 	# list of defined options for SET* commands (eg. SETDESC, SETTITLE)
@@ -58,38 +62,71 @@ class Pinentry(object):
 		self.options = self.defaults.copy()
 
 	def serve(self):
-		while True:
-			line = self.readline().strip()
-			# XXX Docs didn't say how to reply with an error or what error codes exist,
-			# so instead we always reply OK and disconnect on error.
-			cmd, arg = line.split(' ', 1) if ' ' in line else (line, '')
-			if cmd == 'SETQUALITYBAR':
-				self.set_option('quality', True)
-			elif cmd == 'SETQUALITYBAR_TT':
-				self.set_option('quality_tt', decode(arg))
-			elif cmd.startswith('SET') and cmd[3:].lower() in self.ALLOWED_OPTIONS:
-				self.set_option(cmd[3:].lower(), decode(arg))
-			elif cmd == 'CONFIRM':
-				if not self.confirm(one_button=(arg == '--one-button')):
-					die('failed to confirm')
-					break
-			elif cmd == 'MESSAGE':
-				self.message()
-			elif cmd == 'GETPIN':
-				self.getpin()
-
-	def die(self, msg):
-		# XXX this is not correct error handling
-		self.sendline("ERROR: ".format(msg))
-		self.output.close()
+		try:
+			while True:
+				line = self.readline().strip()
+				# XXX Docs didn't say how to reply with an error or what error codes exist,
+				# so instead we always reply OK and disconnect on error.
+				cmd, arg = line.split(' ', 1) if ' ' in line else (line, '')
+				if cmd == 'SETQUALITYBAR':
+					self.set_option('quality', True)
+				elif cmd == 'SETQUALITYBAR_TT':
+					self.set_option('quality_tt', decode(arg))
+				elif cmd.startswith('SET') and cmd[3:].lower() in self.ALLOWED_OPTIONS:
+					self.set_option(cmd[3:].lower(), decode(arg))
+				elif cmd == 'CONFIRM':
+					if not self.confirm(one_button=(arg == '--one-button')):
+						raise PinentryError('failed to confirm')
+				elif cmd == 'MESSAGE':
+					self.message()
+				elif cmd == 'GETPIN':
+					pin = self.getpin()
+					self.sendline(self.encode(pin))
+				else:
+					raise PinentryError("Unknown command: {}".format(cmd))
+				self.sendline('OK')
+		except PinentryError as ex:
+			# XXX this is not correct error handling
+			self.sendline("ERROR: ".format(self.encode(ex)))
+			self.output.close()
 
 	def encode(self, s):
 		"""Given a string s, returns the string with % escapes and (if s is unicode) encoded as utf-8"""
-		pass # TODO
+		if isinstance(s, unicode):
+			s = s.encode('utf-8')
+		out = ''
+		for c in s:
+			if ord(c) > 0x20 and c not in ('%', '\x7f'):
+				# numbers, letters, symbols, space and all unicode range
+				out += c
+			else:
+				# non-printing ASCII characters (or '%')
+				out += '%{:02x}'.format(ord(c))
+		return out
 
 	def decode(self, s):
 		"""Given an encoded string s, interprets as utf-8 and processes % escapes"""
-		pass # TODO
+		if not isinstance(s, unicode):
+			try:
+				s.decode('utf-8')
+			except UnicodeDecodeError as ex:
+				raise PinentryError(str(ex))
+		out = ''
+		while s:
+			if s[0] == '%':
+				if len(s) < 3:
+					raise PinentryError("Incomplete percent-escape: {}".format(s))
+				n = s[1:3]
+				try:
+					n = int(n, 16)
+				except ValueError as ex:
+					raise PinentryError("Invalid percent-escape: %{}".format(n))
+				out += chr(n)
+				s = s[3:]
+			else:
+				out += s[0]
+				s = s[1:]
+		return out
 
 	def readline(self):
 		if '\n' in self.buffer:
@@ -104,11 +141,37 @@ class Pinentry(object):
 			raise EOFError
 		self.buffer += read
 
-	def sendline(self):
-		pass # TODO
+	def sendline(self, line):
+		# sockets and files are written to differently
+		if hasattr(self.output, 'sendall'):
+			# socket
+			self.output.sendall(line + '\n')
+		else:
+			# file
+			self.output.writeline(line)
+			self.output.flush()
 
 	def set_option(self, option, value):
 		"""This method is called when SET* commands are recieved, for example SETTITLE, SETDESC.
 		option is always lowercase. value is a unicode string without % escapes.
 		The default is to store them in the self.options dict."""
 		self.options[option] = value
+
+	def message(self):
+		"""Display self.desc to the user. This is expected to be overridden - the default implementation
+		does nothing."""
+		pass
+
+	def confirm(self, one_button=False):
+		"""Display self.desc to the user, asking them to respond yes/no
+		(these texts should be self.ok, self.cancel). Should return True or False.
+		If one_button=True, no cancel option should be allowed.
+		This is expected to be overridden - the default implementation always returns True."""
+		return True
+
+	def getpin(self):
+		"""The actual important part. Ask the user for the PIN and return it."""
+		raise NotImplementedError
+
+
+# TODO PinentryGetpass
