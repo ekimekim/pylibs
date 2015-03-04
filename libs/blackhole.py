@@ -7,7 +7,7 @@ do something.
 A BlackHole object can have any operation performed on it, and always simply returns the same BlackHole object.
 You can call it. You can add it. All its "methods" are more BlackHoles.
 It evaluates True as a boolean. It compares unequal to and less than other objects.
-It "contains" everything and, if iterated over, will infinitely yield itself.
+It "contains" everything and, if iterated over, will be empty.
 It does not honor any super, so you can easily create a BlackHole that is technically an instance of any class
 you need - for example:
 	class FoobarBlackHole(Foobar, BlackHole):
@@ -75,6 +75,8 @@ class BlackHole(object):
 		return self
 	def __contains__(self):
 		return True
+	def next(self):
+		raise StopIteration
 	# items
 	def __getitem__(self, item):
 		return self
