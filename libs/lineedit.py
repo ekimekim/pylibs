@@ -41,6 +41,7 @@ class LineEditing(object):
 	The line editor will wipe any data on the bottom line of the screen, and only the bottom line.
 	"""
 	TERMINATORS = {'\r', '\n'}
+	PRINTABLE = set(string.printable) - {'\r', '\n', '\x0b', '\x0c'}
 	CONTEXT_MGRS = [get_termattrs, HiddenCursor]
 
 	active_context_mgrs = []
@@ -141,7 +142,7 @@ class LineEditing(object):
 				if self.suppress_nonprinting:
 					# filter non-printing chars before we add to main buffer
 					# (also allow >128 for non-ascii chars)
-					self.esc_buf = filter(lambda c: c in string.printable or ord(c) > 128, self.esc_buf)
+					self.esc_buf = filter(lambda c: c in self.PRINTABLE or ord(c) > 128, self.esc_buf)
 
 				# flush escape buffer
 				self.head += self.esc_buf
