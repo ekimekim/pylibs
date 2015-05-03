@@ -53,13 +53,18 @@ class LineEditing(object):
 	history = []
 	history_pos = 0
 
-	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout, suppress_nonprinting=True):
+	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout, suppress_nonprinting=True, encoding='utf-8'):
 		"""input_fn overrides the default read function. Alternately, input_file specifies a
 		file to read from in the default read function.
 		input_fn should take no args.
 		output is the file to write to, and should be a tty.
 		suppress_nonprinting is default True (set False to disable) and causes any unhandled non-printing characters
-		to not be written to output.
+			to not be written to output.
+		Encoding is the encoding that input is expected to be in.
+			Note that input bytes will buffer until a full character can be decoded.
+			All intermediate output will be encoded with this encoding.
+			Set to None to disable this behaviour and treat all bytes as single characters.
+			Strings returned from self.readline() will be bytes if encoding is None, else unicode.
 		"""
 		if input_fn:
 			self.read = input_fn
@@ -67,6 +72,7 @@ class LineEditing(object):
 			self.input_file = input_file
 		self.output = output
 		self.suppress_nonprinting = suppress_nonprinting
+		self.encoding = encoding
 		self.history = self.history[:] # so we have a unique instance to ourselves
 
 	def read(self):
@@ -96,13 +102,17 @@ class LineEditing(object):
 		assert max_tail >= 2, "logic error: max_tail = {!r}".format(max_tail)
 		tail = tail[:max_tail]
 
+		selected, tail = tail[0], tail[1:]
+		if self.encoding:
+			head, tail, selected = [s.encode(self.encoding) for s in (head, tail, selected)]
+
 		self.output.write(
 			  escapes.SAVE_CURSOR
 			+ escapes.set_cursor(1,999)
 			+ escapes.CLEAR_LINE
 			+ head
-			+ escapes.INVERTCOLOURS + tail[0] + escapes.UNFORMAT
-			+ tail[1:]
+			+ escapes.INVERTCOLOURS + selected + escapes.UNFORMAT
+			+ tail
 			+ escapes.LOAD_CURSOR
 		)
 		self.output.flush()
@@ -135,9 +145,16 @@ class LineEditing(object):
 					self.head, self.tail = ESCAPE_HANDLERS[self.esc_buf](self.head, self.tail, self)
 					self.esc_buf = ''
 
-				# on partial escape sequences, continue without action
+				# on partial escape sequences, continue to buffer
 				if any(sequence.startswith(self.esc_buf) for sequence in ESCAPE_HANDLERS):
 					continue
+
+				# on partial unicode characters, continue to buffer
+				if self.encoding:
+					try:
+						self.esc_buf = self.esc_buf.decode(self.encoding)
+					except UnicodeDecodeError:
+						continue
 
 				if self.suppress_nonprinting:
 					# filter non-printing chars before we add to main buffer
@@ -162,6 +179,15 @@ class LineEditing(object):
 		ret = self.head + self.tail
 		self.head = ''
 		self.tail = ''
+
+		if self.encoding and not isinstance(ret, unicode):
+			# Some edge cases (eg. ^C) can result in ret being bytes even when decoding should happen.
+			# Our code doesn't care because the implict coercion is safe for empty strings and ascii characters,
+			# but we want to avoid unexpected behaviour when returning to the caller.
+			# If this raises a UnicodeDecodeError, it indicates that there is a logic bug, as non-ascii characters
+			# shouldn't be present if ret isn't already a unicode object.
+			ret = ret.decode('ascii')
+
 		return ret
 
 	def write(self, s):
