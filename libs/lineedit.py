@@ -1,6 +1,7 @@
 
 import sys
 import string
+import re
 
 import escapes
 from termhelpers import TermAttrs, termsize
@@ -53,7 +54,8 @@ class LineEditing(object):
 	history = []
 	history_pos = 0
 
-	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout, suppress_nonprinting=True, encoding='utf-8'):
+	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout,
+				 suppress_nonprinting=True, encoding='utf-8', completion=None):
 		"""input_fn overrides the default read function. Alternately, input_file specifies a
 		file to read from in the default read function.
 		input_fn should take no args.
@@ -65,6 +67,14 @@ class LineEditing(object):
 			All intermediate output will be encoded with this encoding.
 			Set to None to disable this behaviour and treat all bytes as single characters.
 			Strings returned from self.readline() will be bytes if encoding is None, else unicode.
+		completion, if given, should be a callable that takes an input string and return a list of possible completions.
+			Results generally should have the input as a prefix, but this is not a hard requirement.
+			This function will be called with the current pre-cursor input (back to the first non-word character)
+			when the user presses the completion key (tab). Word characters are as per the re module.
+			If any results are returned, the given input is replaced with the longest common prefix
+			among the results. If only one result is returned, a space is also appended.
+			An iterable may be given instead of a callable - this is equivilent to a completion_fn that returns
+			all items from that iterable which start with the input.
 		"""
 		if input_fn:
 			self.read = input_fn
@@ -73,6 +83,7 @@ class LineEditing(object):
 		self.output = output
 		self.suppress_nonprinting = suppress_nonprinting
 		self.encoding = encoding
+		self.completion_fn = completion if callable(completion) else complete_from(completion)
 		self.history = self.history[:] # so we have a unique instance to ourselves
 
 	def read(self):
@@ -274,10 +285,42 @@ def down(head, tail, obj):
 	obj.history_pos -= 1
 	return obj.history[obj.history_pos], ''
 
+# tab completion
+@escape('\t')
+def complete(head, tail, obj):
+	if not obj.completion_fn:
+		return head, tail
+	match = re.search('(.*?)(\w+)$', head, re.UNICODE if obj.encoding else 0)
+	if not match:
+		return head, tail
+	head, value = match.groups()
+	results = obj.completion_fn(value)
+	if not results:
+		return head + value, tail
+	if len(results) == 1:
+		result, = results
+		return head + result + ' ', tail
+	# find common prefix
+	first, rest = results[0], results[1:]
+	prefix = ''
+	for i, c in enumerate(first):
+		if not all(len(s) > i and s[i] == c for s in rest):
+			break
+		prefix += c
+	return head + prefix, tail
+
+def complete_from(items):
+	"""Helper function for completion functions.
+	Returns a function which takes an input and returns all items that start with input.
+	"""
+	def _complete_from(value):
+		return [item for item in items if item.startswith(value)]
+	return _complete_from
 
 if __name__ == '__main__':
 	# basic test
-	editor = LineEditing()
+	import sys
+	editor = LineEditing(completion=sys.argv[1:])
 	try:
 		with editor:
 			while True:
