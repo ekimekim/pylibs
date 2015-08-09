@@ -54,8 +54,10 @@ def get_greenlets():
 def print_greenlet_tbs():
 	"""Print all greenlets along with a traceback, or a short diagnostic (eg. <started but not running>)."""
 	for g in get_greenlets():
-		tb = get_tb(g).rstrip('\n')
-		if not tb:
+		tb = get_tb(g)
+		if tb:
+			tb = tb.rstrip('\n')
+		else:
 			if not g.started:
 				tb = "<not started>"
 			elif not g.ready():
