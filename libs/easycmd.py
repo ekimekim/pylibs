@@ -8,11 +8,15 @@ to manually create Popen objects, while being more flexible than check_call() an
 Should work fine with gevent.subprocess with monkey patching.
 """
 
+import logging
 import os
 import signal
 import sys
 import weakref
 from subprocess import PIPE, Popen, CalledProcessError
+
+
+logger = logging.getLogger('easycmd')
 
 
 def cmd(args, return_stdout=True, return_stderr=False, return_code=False, return_proc=False,
@@ -119,9 +123,11 @@ def cmd(args, return_stdout=True, return_stderr=False, return_code=False, return
 		stderr = get_devnull()
 
 	proc = None
+	options = dict(stdin=stdin, stdout=stdout, stderr=stderr,
+	               close_fds=close_fds, shell=shell, cwd=cwd, env=env)
+	logging.debug("Calling Popen() with args {!r} and options {!r}".format(args, options))
 	try:
-		proc = Popen(args, stdin=stdin, stdout=stdout, stderr=stderr, close_fds=close_fds,
-		             shell=shell, cwd=cwd, env=env)
+		proc = Popen(args, **options)
 		stdout, stderr = proc.communicate(stdin_text)
 		exitcode = proc.wait()
 	except BaseException:
@@ -133,6 +139,7 @@ def cmd(args, return_stdout=True, return_stderr=False, return_code=False, return
 				pass
 		raise ex_type, ex, tb
 
+	logging.debug("Command {!r} exited {}: stdout={!r}, stderr={!r}".format(args, exitcode, stdout, stderr))
 	if not success(stdout, stderr, exitcode):
 		raise FailedProcessError(args, stdout, stderr, exitcode)
 
@@ -147,6 +154,7 @@ def cmd(args, return_stdout=True, return_stderr=False, return_code=False, return
 		results = None
 	elif len(results) == 1:
 		results, = results
+	logging.debug("Returning results: {!r}".format(results))
 	return results
 
 
