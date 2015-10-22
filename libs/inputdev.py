@@ -216,11 +216,11 @@ class InputDevice(object):
 		self._ensure_file()
 		return self._file.fileno()
 
-	def read(self):
+	def read(self, timeout=None):
 		"""Reads an event and returns it."""
 		while True:
 			try:
-				r, w, x = select.select([self.fileno()], [], [])
+				r, w, x = select.select([self.fileno()], [], [], timeout)
 			except OSError as ex:
 				if ex.errno != errno.EINTR:
 					raise
@@ -237,6 +237,8 @@ class InputDevice(object):
 			yield self.read()
 
 	def close(self):
+		"""Close the underlying file descriptor. Note that attempting to read after this
+		is called will cause it to be re-opened."""
 		if self._file is None:
 			return
 		file, self._file = self._file, None
@@ -246,3 +248,11 @@ class InputDevice(object):
 		if isinstance(other, InputDevice) and self.unique == other.unique:
 			return True
 		return False
+
+	# close on __exit__ as per other file-like objects
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, *exc_info):
+		self.close()
