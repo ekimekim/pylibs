@@ -39,6 +39,8 @@ class LazyList(object):
 		                                      "?" if self.length is None else self.length)
 
 	def __len__(self):
+		if self.length == INF:
+			raise ValueError("Can't take len() of infinite list")
 		while self.length is None:
 			self.fetch_next() # exhaust iterable
 		return self.length
@@ -57,7 +59,7 @@ class LazyList(object):
 			raise IndexError("{} indices must be int, not {}".format(
 			                 type(index).__name__, type(self).__name__))
 		if index < 0:
-			if len(self) == INF:
+			if self.length == INF:
 				raise ValueError("Infinite list does not support negative indices")
 			index += len(self)
 		while index >= len(self.items):
@@ -85,11 +87,11 @@ class LazyList(object):
 		if start is None:
 			start = 0
 		elif start < 0:
-			if len(self) == INF:
+			if self.length == INF:
 				raise ValueError("Infinite list does not support negative indices")
 			start += len(self)
 		if stop is not None and stop < 0:
-			if len(self) == INF:
+			if self.length == INF:
 				stop = None
 			else:
 				stop += len(self)
