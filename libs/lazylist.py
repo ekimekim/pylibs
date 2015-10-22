@@ -85,6 +85,8 @@ class LazyList(object):
 		if start is None:
 			start = 0
 		elif start < 0:
+			if len(self) == INF:
+				raise ValueError("Infinite list does not support negative indices")
 			start += len(self)
 		if stop is not None and stop < 0:
 			if len(self) == INF:
