@@ -128,3 +128,16 @@ def starve_test(callback=None, timeout=2, interval=0.1):
 	while 1:
 		signal.alarm(2)
 		gevent.sleep(0.1)
+
+
+def track_switches(callback):
+	"""Sets a profile function to watch for changes in current greenlet.
+	Calls callback with new greenlet as arg."""
+	greenlet = [None] # 1-length list lets us reference it without redefining it in inner block
+	import gevent, sys
+	def prof(frame, event, arg):
+		newgreenlet = gevent.getcurrent()
+		if greenlet[0] != newgreenlet:
+			greenlet[0] = newgreenlet
+			callback(greenlet[0])
+	sys.setprofile(prof)
