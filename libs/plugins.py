@@ -213,14 +213,18 @@ class Plugin(TracksInstances):
 	@classmethod
 	def _resolve_module(cls, arg):
 		"""Shared input handling for unload and reload. Returns (name, module), or (None, None) for no match."""
+		# module, class, instance, plugin name or module name
 		if not isinstance(arg, ModuleType):
+			# class, instance, plugin name or module name
 			if isinstance(arg, cls):
 				arg = type(arg)
-			if not issubclass(arg, cls):
-				if arg not in cls.loaded_by_name:
-					return None, None
+			# class, plugin name or module name
+			if not issubclass(arg, cls) and arg in cls.loaded_by_name:
 				arg = cls.loaded_by_name[arg]
-			arg = arg.__module__
+			# class or module name
+			if issubclass(arg, cls):
+				arg = arg.__module__
+		# module or module name
 		try:
 			return modulemanager._resolve_module(arg)
 		except ValueError:
