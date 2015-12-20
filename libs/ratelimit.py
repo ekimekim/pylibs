@@ -133,8 +133,16 @@ class BlockingRateLimit(RateLimit):
 	Note that this implementation requires gevent.
 	"""
 
-	def check_limit(self):
+	def run(self, block=True):
+		if self.check_limit(block=block):
+			self.inc_count()
+		else:
+			return self.limited()
+
+	def check_limit(self, block=True):
 		import gevent
 		while not super(BlockingRateLimit, self).check_limit():
+			if not block:
+				return False
 			gevent.sleep(self.time_left())
 		return True
