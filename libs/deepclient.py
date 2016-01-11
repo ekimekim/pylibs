@@ -142,6 +142,10 @@ class DeepClient(object):
 		if response != 'success':
 			raise RequestFailed("Unknown response for set_vip: {!r}".format(response))
 
+	def escrow(self, name, points):
+		"""Gives an Escrow() object associated with this instance"""
+		return Escrow(self, name, points)
+
 
 class User(object):
 	def __init__(self, data):
