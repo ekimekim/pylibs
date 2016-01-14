@@ -4,6 +4,7 @@
 import json
 import logging
 import weakref
+from itertools import count
 
 import gevent.lock
 import pytz
@@ -33,16 +34,28 @@ class UserNotFound(RequestFailed):
 	"""The requested user does not exist"""
 
 
-class InvalidPoints(RequestFailed):
-	"""A points arg was not a positive integer"""
-
-
 class NotEnoughPoints(RequestFailed):
 	"""User did not have enough points to complete the operation"""
 
 
 class NoEscrow(RequestFailed):
 	"""User was not holding any points in escrow"""
+
+
+class InvalidValue(RequestFailed):
+	"""Superclass for classes that indicate a malformed or out of range value was sent"""
+
+
+class InvalidPoints(InvalidValue):
+	"""A points arg was not a positive integer"""
+
+
+class InvalidVIPLevel(InvalidValue):
+	"""A vip level arg was not in the range 0, 1, 2, 3"""
+
+
+class InvalidVIPDays(InvalidValue):
+	"""set_vip days must be a positive integer"""
 
 
 class DeepClient(object):
@@ -53,7 +66,7 @@ class DeepClient(object):
 		self.authenticate(api_secret)
 
 	def request(self, method, *args):
-		send_msg = '|'.join(('api', method) + map(str, args))
+		send_msg = '|'.join(['api', method] + map(str, args))
 		self.logger.debug("Waiting to send {!r}".format(send_msg))
 		with self.lock:
 			self.logger.debug("Sending: {!r}".format(send_msg))
@@ -66,7 +79,7 @@ class DeepClient(object):
 			raise ProtocolError("Could not decode json response {!r}: {}".format(response, ex))
 		if not isinstance(response, dict):
 			raise ProtocolError("Response was {!r}, expected dict".format(response))
-		missing = {'function', 'param', 'msg'} - response.keys()
+		missing = {'function', 'param', 'msg'} - set(response.keys())
 		if missing:
 			raise ProtocolError("Response {} missing required keys: {}".format(response, missing))
 		if response['function'] != method:
@@ -81,28 +94,44 @@ class DeepClient(object):
 
 	def get_user(self, name):
 		response = self.request('get_user', name)
-		if response == "user not found":
+		if response == "User not found":
 			raise UserNotFound(name)
 		return User(response)
 
 	def get_users(self, offset=0, limit=None):
-		args = offset,
-		if limit is not None:
-			args += limit,
-		response = self.request('get_users', *args)
-		return map(User, response)
+		"""Yields up to limit users, starting from offset."""
+		# API only lets us fetch 100 at a time
+		STEP = 100
+		if limit is None:
+			offsets = count(offset, STEP)
+		else:
+			offsets = xrange(offset, offset + limit, STEP)
+		for offset in offsets:
+			response = self.request('get_users', offset, STEP)
+			if response == 'List empty':
+				break
+			for item in response:
+				yield User(item)
+			if len(response) != STEP: # we didn't get as many as we asked for, we've hit the end
+				break
 
 	def _points_op(self, method, name, points):
-		"""Shared code for methods that take (user, points)"""
+		"""Shared code for set/add/del points"""
 		response = self.request(method, name, points)
-		if response == "user not found":
-			raise UserNotFound(name)
-		if response == "points should be a positive number":
-			raise InvalidPoints(points)
-		if response == "Not enough points":
-			raise NotEnoughPoints(points)
-		if response != 'success':
+		if response == 'success':
+			return
+		if response != 'failed':
 			raise RequestFailed("Unknown response for {}: {!r}".format(method, response))
+		# failed can mean either no such user, or bad points value
+		# let's just check points manually to eliminate it as a possibility
+		points = str(points)
+		if points.isdigit():
+			points = int(points)
+			if 0 <= points < 2**31:
+				# points look good, must be bad user
+				raise UserNotFound(name)
+		# points failed for some reason
+		raise InvalidPoints(points)
 
 	def set_points(self, name, points):
 		return self._points_op('set_points', name, points)
@@ -111,10 +140,20 @@ class DeepClient(object):
 		return self._points_op('add_points', name, points)
 
 	def del_points(self, name, points):
+		"""Note that a del_points for more points than a user has will succeed,
+		setting their points to 0"""
 		return self._points_op('del_points', name, points)
 
 	def add_to_escrow(self, name, points):
-		return self._points_op('add_to_escrow', name, points)
+		response = self.request('add_to_escrow', name, points)
+		if response == "user not found":
+			raise UserNotFound(name)
+		if response == "points should be a positive number":
+			raise InvalidPoints(points)
+		if response == "Not enough points":
+			raise NotEnoughPoints(points)
+		if response != 'success':
+			raise RequestFailed("Unknown response for add_to_escrow: {!r}".format(response))
 
 	def end_escrow(self, name, commit):
 		"""Commit should be True or False to either commit or cancel escrow.
@@ -130,15 +169,19 @@ class DeepClient(object):
 			raise RequestFailed("Unknown response for {}: {!r}".format(method, response))
 
 	def commit_escrow(self, name):
-		self.end_escrow(True)
+		self.end_escrow(name, True)
 
 	def cancel_escrow(self, name):
-		self.end_escrow(False)
+		self.end_escrow(name, False)
 
 	def set_vip(self, name, level, days):
 		response = self.request('set_vip', name, level, days)
-		if response == "user not found":
+		if response == "failed":
 			raise UserNotFound(name)
+		if response == "Failed. Incorrect VIP level.":
+			raise InvalidVIPLevel(level)
+		if response == "Failed. Incorrect VIP length.":
+			raise InvalidVIPDays(days)
 		if response != 'success':
 			raise RequestFailed("Unknown response for set_vip: {!r}".format(response))
 
@@ -152,23 +195,33 @@ class User(object):
 		self.name = data['user']
 		self.points = data['points']
 		self.watch_time = data['watch_time']
-		self.vip = data['vip'] # 0 (or 10?) for normal, 1,2,3 for bronze/silver/gold
-		self.mod = data['mod'] # Not sure what this number means. Example just says 5?
+		self.vip = data['vip'] # 10 for normal, 1,2,3 for bronze/silver/gold
+		self.mod = data['mod'] # 0 for normal, up to 5 for levels of mod?
 		self.joined = self._parsetime(data['join_date'])
 		self.last_seen = self._parsetime(data['last_seen'])
 		self.vip_expiry = self._parsetime(data['vip_expiry'])
 
+	def as_dict(self):
+		return {k: getattr(self, k)
+		        for k in ('name', 'points', 'watch_time', 'vip', 'mod', 'joined', 'last_seen', 'vip_expiry')}
+
 	@staticmethod
 	def _parsetime(value):
 		# ugh, shitty timestamps, local time, and shitty python date modules
-		import datetime, time
-		value = datetime.parser.parse(value) # guesses format
-		value = value.astimezone(pytz.utc) # converts to UTC. would you believe this requires a 3rd party lib?
+		import time
+		from dateutil import parser
+		value = parser.parse(value) # guesses format
+		try:
+			value = value.astimezone(pytz.utc) # converts to UTC. would you believe this requires a 3rd party lib?
+		except ValueError:
+			# parsed value had no timestamp. let's assume it's already UTC, since it's the least worst assumption
+			pass
 		value = time.mktime(value.timetuple()) # converts to epoch by way of python's time tuples, because providing a direct interface to the only sane way of counting time would be too much to ask
 		return value
 
-	def __str__(self):
+	def __repr__(self):
 		return "<User {self.name!r} {self.points} points>".format(self=self)
+	__str__ = __repr__
 
 
 class Escrow(object):
@@ -194,7 +247,7 @@ class Escrow(object):
 
 	def __enter__(self):
 		self.logger.info("Putting {} into escrow".format(self.points))
-		self.lock = self._locks.get(self.name, gevent.lock.BoundedSemaphore())
+		self.lock = self._locks.setdefault(self.name, gevent.lock.BoundedSemaphore())
 		self.lock.acquire()
 		self.logger.debug("Acquired lock")
 
