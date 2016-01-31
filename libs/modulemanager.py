@@ -81,6 +81,10 @@ def unload(module, safe=True):
 				return obj
 		return None
 
+	import objgraph
+	import greenlet
+	import sys
+
 	try:
 		del sys.modules[name]
 		if not safe:
@@ -89,6 +93,13 @@ def unload(module, safe=True):
 		module = find_module()
 		if module is None:
 			return
+		myframe = sys._getframe()
+		topframe = myframe
+		while topframe.f_back:
+			topframe = topframe.f_back
+		predicate = lambda x: objgraph.is_proper_module(x) or isinstance(x, greenlet.greenlet) or x is topframe
+		chain = objgraph.find_backref_chain(module, predicate, extra_ignore=[id(myframe)])
+		objgraph.show_chain(chain)
 		raise Referenced(name, module)
 	except:
 		# revert the unload (if we can)
