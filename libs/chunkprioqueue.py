@@ -68,6 +68,8 @@ class ChunkedPriorityQueue(gevent.queue.Queue):
 			self._limits.pop(None, None)
 		else:
 			self._limits[None] = limit
+		# try to unblock any pending gets
+		self._schedule_unlock()
 
 	def limit_to(self, limit):
 		"""Apply a limit for the duration of a code block"""
@@ -77,5 +79,7 @@ class ChunkedPriorityQueue(gevent.queue.Queue):
 				parent._limits[self] = limit
 			def __exit__(self, *exc_info):
 				del parent._limits[self]
+				# try to unblock any pending gets
+				parent._schedule_unlock()
 		return _LimitContext()
 
