@@ -13,9 +13,10 @@ import gevent.pool
 import gevent.backdoor
 
 
-def backdoor(port=1234):
-	"""Start up a backdoor server on the local interface."""
-	backdoor = gevent.backdoor.BackdoorServer(('localhost', port))
+def backdoor(port=1234, **kwargs):
+	"""Start up a backdoor server on the local interface.
+	Extra kwargs become local vars"""
+	backdoor = gevent.backdoor.BackdoorServer(('localhost', port), locals=kwargs)
 	backdoor.start()
 
 
