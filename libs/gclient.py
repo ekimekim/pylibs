@@ -44,7 +44,6 @@ class GClient(object):
 
 	def _start(self):
 		"""Override this with code that creates and initializes a connection"""
-		raise NotImplementedError
 
 	def stop(self, ex=None):
 		"""Stop the client, optionally referencing some exception.
@@ -116,7 +115,6 @@ class GClient(object):
 	def _send(self, msg):
 		"""Override this with specific code for sending a message. It may raise to indicate a failure
 		that will stop the client."""
-		raise NotImplementedError
 
 	def _recv_loop(self):
 		try:
@@ -129,7 +127,6 @@ class GClient(object):
 	def _receive(self):
 		"""Override this with code that receives data. It may return to indicate a graceful close,
 		or raise to indicate a failure that will stop the client."""
-		raise NotImplementedError
 
 
 class GSocketClient(GClient):
