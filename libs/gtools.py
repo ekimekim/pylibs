@@ -11,6 +11,7 @@ import gevent.queue
 import gevent.event
 import gevent.pool
 import gevent.backdoor
+from gevent.select import select
 
 
 def backdoor(port=1234, **kwargs):
@@ -142,3 +143,28 @@ def track_switches(callback):
 			greenlet[0] = newgreenlet
 			callback(greenlet[0])
 	sys.setprofile(prof)
+
+
+def send_fd(sock, fd):
+	"""Send an fd over a unix socket"""
+	import multiprocessing.reduction
+	if hasattr(fd, 'fileno'):
+		fd = fd.fileno()
+	while True:
+		r, w, x = select([], [sock], [])
+		if not w:
+			continue
+		multiprocessing.reduction.send_handle(sock, fd, None)
+		break
+
+
+def recv_fd(sock):
+	"""Receive an fd from a unix socket.
+	Note this function returns a raw integer fd. You probably want to os.fdopen() or socket.fromfd() it.
+	"""
+	import multiprocessing.reduction
+	while True:
+		r, w, x = select([sock], [], [])
+		if not r:
+			continue
+		return multiprocessing.reduction.recv_handle(sock)
