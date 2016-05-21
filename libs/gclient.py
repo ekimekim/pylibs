@@ -66,9 +66,9 @@ class GClient(object):
 				event.set()
 			self._stop(ex)
 			if ex:
-				self.stopped.set_exception(ex)
+				self._stopped.set_exception(ex)
 			else:
-				self.stopped.set(None)
+				self._stopped.set(None)
 
 		stop_worker.get()
 
