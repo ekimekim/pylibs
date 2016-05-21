@@ -10,6 +10,8 @@ _receive should implement a loop that receives data and acts on it
 
 __REQUIRES__ = ['gevent']
 
+import logging
+
 import gevent
 from gevent.event import AsyncResult, Event
 from gevent.pool import Group
@@ -26,21 +28,26 @@ class GClient(object):
 		running: True if the client has been started but not stopped
 	"""
 
-	def __init__(self):
+	def __init__(self, logger=None):
 		self.group = Group()
 		self.started = False
 		self._send_queue = Queue()
 		self._stopping = False
 		self._stopped = AsyncResult()
+		if not logger:
+			logger = logging.getLogger('gclient').getChild(type(self).__name__)
+		self.logger = logger
 
 	def start(self):
 		"""Start the client, performing some connection step and beginning processing."""
 		if self.started:
 			raise Exception("Already started")
 		self.started = True
+		self.logger.debug("{} starting".format(self))
 		self._start()
 		self._send_loop_worker = self.group.spawn(self._send_loop)
 		self._recv_loop_worker = self.group.spawn(self._recv_loop)
+		self.logger.info("{} started".format(self))
 
 	def _start(self):
 		"""Override this with code that creates and initializes a connection"""
@@ -57,6 +64,11 @@ class GClient(object):
 			self.started = True
 		self._stopping = True
 
+		if ex:
+			self.logger.info("{} stopping with error".format(self), exc_info=True)
+		else:
+			self.logger.info("{} stopping".format(self))
+
 		# since the greenlet calling stop() might be in self.group, we make a new greenlet to do the work
 		@gevent.spawn
 		def stop_worker():
@@ -69,6 +81,7 @@ class GClient(object):
 				self._stopped.set_exception(ex)
 			else:
 				self._stopped.set(None)
+			self.logger.debug("{} fully stopped".format(self))
 
 		stop_worker.get()
 
