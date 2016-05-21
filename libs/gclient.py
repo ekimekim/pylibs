@@ -147,7 +147,7 @@ class GSocketClient(GClient):
 	Does not implement _start(). Expects a subclass to set self._socket to a socket-like object.
 	"""
 
-	def _stop(self):
+	def _stop(self, ex=None):
 		self._socket.close()
 
 	def _send(self, msg):
@@ -162,7 +162,7 @@ class GSocketClient(GClient):
 	def _receive(self):
 		buf = ''
 		while True:
-			data = self._socket.read()
+			data = self._socket.recv(4096)
 			if not data:
 				# connection closed
 				return
