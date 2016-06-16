@@ -34,9 +34,10 @@ class GClient(object):
 		self._send_queue = Queue()
 		self._stopping = False
 		self._stopped = AsyncResult()
-		if not logger:
-			logger = logging.getLogger('gclient').getChild(type(self).__name__)
-		self.logger = logger
+		if not hasattr(self, 'logger'): # let subclass overrride if they want
+			if not logger:
+				logger = logging.getLogger('gclient').getChild(type(self).__name__)
+			self.logger = logger
 
 	def start(self):
 		"""Start the client, performing some connection step and beginning processing."""
