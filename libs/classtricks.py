@@ -187,7 +187,9 @@ class HasLogger(object):
 	"""
 
 	def __init__(self, *args, **kwargs):
-		self.parent_logger = kwargs.pop('logger', logging.getLogger())
+		self.parent_logger = kwargs.pop('logger', None)
+		if not self.parent_logger:
+			self.parent_logger = logging.getLogger()
 		self.logger = self.parent_logger.getChild(type(self).__name__).getChild(str(self._get_logger_name()))
 		super(HasLogger, self).__init__(*args, **kwargs)
 
