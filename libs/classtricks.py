@@ -4,6 +4,7 @@
 
 
 from weakref import WeakKeyDictionary, WeakSet
+import logging
 
 
 def gencls(*bases, **extras):
@@ -174,3 +175,21 @@ class TracksInstances(object):
 			for subcls in cls.__subclasses__():
 				result |= subcls.get_instances()
 		return result
+
+
+class HasLogger(object):
+	"""A mixin that does some basic logging setup for a class.
+	Takes an optional logger kwarg to __init__ (will pass other args to super).
+	If not given, this passed logger (henceforth "parent_logger") defaults to root.
+	The instance's logger is then parent_logger.getChild(cls name).getChild(instance _get_logger_name()).
+	The default implementation of _get_logger_name() returns id(self).
+	The instance's logger is available as self.logger, the parent logger as self.parent_logger.
+	"""
+
+	def __init__(self, *args, **kwargs):
+		self.parent_logger = kwargs.pop('logger', logging.getLogger())
+		self.logger = self.parent_logger.getChild(type(self).__name__).getChild(str(self._get_logger_name()))
+		super(HasLogger, self).__init__(*args, **kwargs)
+
+	def _get_logger_name(self):
+		return id(self)
