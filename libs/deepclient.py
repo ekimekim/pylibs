@@ -59,6 +59,15 @@ class InvalidVIPDays(InvalidValue):
 
 
 class DeepClient(object):
+	# XXX The following commands are unimplemented:
+	# get_song_count
+	# get_command_count
+	# get_quote_count
+	# get_songs
+	# get_quotes
+	# get_commands
+	# get_command
+
 	def __init__(self, url, api_secret):
 		self.logger = logging.getLogger("deepclient").getChild("{:x}".format(id(self)))
 		self.conn = create_connection(url)
@@ -124,14 +133,19 @@ class DeepClient(object):
 		"""As get_users(), but returns users sorted by number of points"""
 		return self._get_users('get_top_users', offset=offset, limit=limit)
 
-	def _points_op(self, method, name, points):
+	def get_users_count(self):
+		return int(self.request("get_users_count"))
+
+	def _points_op(self, method, name, points, *args):
 		"""Shared code for set/add/del points"""
-		response = self.request(method, name, points)
+		response = self.request(method, name, points, *args)
 		if response == 'success':
 			return
 		if response != 'failed':
 			raise RequestFailed("Unknown response for {}: {!r}".format(method, response))
 		# failed can mean either no such user, or bad points value
+		#     TODO might also mean not enough points for del_points if extra arg is True.
+		#     but we don't know what string that returns yet
 		# let's just check points manually to eliminate it as a possibility
 		points = str(points)
 		if points.isdigit():
@@ -148,10 +162,10 @@ class DeepClient(object):
 	def add_points(self, name, points):
 		return self._points_op('add_points', name, points)
 
-	def del_points(self, name, points):
-		"""Note that a del_points for more points than a user has will succeed,
-		setting their points to 0"""
-		return self._points_op('del_points', name, points)
+	def del_points(self, name, points, fail_if_insufficient=False):
+		"""Pass fail_if_insufficient=False to silently set points to 0 if user does not have enough points,
+		instead of failing."""
+		return self._points_op('del_points', name, points, fail_if_insufficient)
 
 	def add_to_escrow(self, name, points):
 		response = self.request('add_to_escrow', name, points)
