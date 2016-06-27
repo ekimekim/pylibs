@@ -98,8 +98,8 @@ class DeepClient(object):
 			raise UserNotFound(name)
 		return User(response)
 
-	def get_users(self, offset=0, limit=None):
-		"""Yields up to limit users, starting from offset."""
+	def _get_users(self, method, offset, limit):
+		"""Shared code for get_users/get_top_users"""
 		# API only lets us fetch 100 at a time
 		STEP = 100
 		if limit is None:
@@ -107,13 +107,22 @@ class DeepClient(object):
 		else:
 			offsets = xrange(offset, offset + limit, STEP)
 		for offset in offsets:
-			response = self.request('get_users', offset, STEP)
+			step = min(limit - offset, STEP) if limit is not None else STEP
+			response = self.request(method, offset, step)
 			if response == 'List empty':
 				break
 			for item in response:
 				yield User(item)
-			if len(response) != STEP: # we didn't get as many as we asked for, we've hit the end
+			if len(response) != step: # we didn't get as many as we asked for, we've hit the end
 				break
+
+	def get_users(self, offset=0, limit=None):
+		"""Yields up to limit users, starting from offset."""
+		return self._get_users('get_users', offset=offset, limit=limit)
+
+	def get_top_users(self, offset=0, limit=None):
+		"""As get_users(), but returns users sorted by number of points"""
+		return self._get_users('get_top_users', offset=offset, limit=limit)
 
 	def _points_op(self, method, name, points):
 		"""Shared code for set/add/del points"""
