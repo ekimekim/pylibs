@@ -195,3 +195,17 @@ class HasLogger(object):
 
 	def _get_logger_name(self):
 		return id(self)
+
+
+class NoOpContext(object):
+	"""A context manager that does nothing. Useful if you want to optionally invoke a context manager, eg:
+		manager = SomeContextManager() if use_context_manager else NoOpContext()
+		with manager:
+			do_thing()
+	"""
+
+	def __enter__(self):
+		pass
+
+	def __exit__(self, *exc_info):
+		pass
