@@ -1,6 +1,7 @@
 
-import sys
+import signal
 import string
+import sys
 import re
 
 import escapes
@@ -55,7 +56,7 @@ class LineEditing(object):
 	history_pos = 0
 
 	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout,
-				 suppress_nonprinting=True, encoding='utf-8', completion=None):
+				 suppress_nonprinting=True, encoding='utf-8', completion=None, gevent_handle_sigint=False):
 		"""input_fn overrides the default read function. Alternately, input_file specifies a
 		file to read from in the default read function.
 		input_fn should take no args.
@@ -75,6 +76,8 @@ class LineEditing(object):
 			among the results. If only one result is returned, a space is also appended.
 			An iterable may be given instead of a callable - this is equivilent to a completion_fn that returns
 			all items from that iterable which start with the input.
+		gevent_handle_sigint=True: Add some special functionality to work around an issue with KeyboardInterrupt
+			and gevent. Note this disables SIGINT from raising, but makes SIGQUIT do so instead.
 		"""
 		if input_fn:
 			self.read = input_fn
@@ -85,6 +88,22 @@ class LineEditing(object):
 		self.encoding = encoding
 		self.completion_fn = completion if callable(completion) else complete_from(completion)
 		self.history = self.history[:] # so we have a unique instance to ourselves
+		self._gevent_handle_sigint = gevent_handle_sigint
+
+		# If we're using gevent, the keyboard interrupt handling doesn't work well, we probably
+		# won't raise the KeyboardInterrupt in the right greenlet. We work around this by explicitly handling
+		# the SIGINT and re-raising in the correct place.
+		# We rebind SIGQUIT to raise KeyboardInterrupt for debugging/aborting
+		if self._gevent_handle_sigint:
+			import gevent
+			self._readline_greenlet = None
+			def _sigquit(signum, frame):
+				raise KeyboardInterrupt
+			def _sigint():
+				if self._readline_greenlet:
+					self._readline_greenlet.kill(KeyboardInterrupt, block=False)
+			signal.signal(signal.SIGQUIT, _sigquit)
+			gevent.signal(signal.SIGINT, _sigint)
 
 	def read(self):
 		"""Read a single character of input, or '' (or EOFError) on EOF.
@@ -139,6 +158,10 @@ class LineEditing(object):
 		self.history_pos = 0
 
 		try:
+			if self._gevent_handle_sigint:
+				import gevent
+				self._readline_greenlet = gevent.getcurrent()
+
 			while True:
 
 				self.refresh()
@@ -183,6 +206,9 @@ class LineEditing(object):
 		except EOFError:
 			if not (self.head or self.tail): raise
 			# fall through
+		finally:
+			if self._gevent_handle_sigint:
+				self._readline_greenlet = None
 
 		self.history[0] = self.head + self.tail
 		if not self.history[0]: self.history.pop(0)
