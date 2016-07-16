@@ -21,9 +21,11 @@ def backdoor(port=1234, **kwargs):
 	backdoor.start()
 
 
-def gmap(func, iterable, lazy=False):
-	"""As per map(), but each func is run in a seperate greenlet. If lazy, as per imap() instead."""
-	results = gevent.pool.Group().imap(func, iterable)
+def gmap(func, iterable, lazy=False, size=None):
+	"""As per map(), but each func is run in a seperate greenlet. If lazy, as per imap() instead.
+	If size given, limits concurrency to at most that many greenlets at once."""
+	pool = gevent.pool.Group() if size is None else gevent.pool.Pool(size)
+	results = pool.imap(func, iterable)
 	if not lazy: results = list(results)
 	return results
 
