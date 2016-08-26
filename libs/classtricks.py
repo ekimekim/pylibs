@@ -11,7 +11,7 @@ def gencls(*bases, **extras):
 	"""Define a new class inline (ie. class version of "lambda").
 	Takes classes to use as base class for args, and any extra attrs to set as kwargs.
 	"""
-	return type(','.join(bases), bases, extras)
+	return type(','.join(base.__name__ for base in bases), bases, extras)
 
 
 def issubclass(subcls, supercls):
