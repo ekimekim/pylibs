@@ -13,6 +13,7 @@ def urljoin(base, *args):
 
 class TwitchClient(object):
 	base_url = 'https://api.twitch.tv/kraken/'
+	CLIENT_ID = 'jzkbprff40iqj646a697cyrvl0zt2m6'
 
 	def __init__(self, oauth=None):
 		"""May authenticate with an oauth token."""
@@ -27,6 +28,7 @@ class TwitchClient(object):
 		headers.setdefault('Accept', 'application/vnd.twitchtv{}+json'.format(version_data))
 		if self.oauth:
 			headers.setdefault("Authorization", "OAuth {}".format(self.oauth))
+		headers.setdefault("Client-ID", self.CLIENT_ID)
 		if endpoint.startswith('https://'):
 			url = endpoint
 		else:
