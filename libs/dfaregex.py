@@ -166,8 +166,117 @@ def _parse(data):
 			parts.append(('literal', c))
 
 	# close out final alternate option, and return tree as an alternate operation of many concat operations
-	# this creates some unneeded layers but meh
+	# this creates some unneeded layers but we simplify later
 	alternates.append(parts)
 	tree = ('alternate', [('concat', parts) for parts in alternates])
 
 	return tree, data
+
+
+def _simplify(tree):
+	"""Attempts to simplify a tree using some basic transform rules"""
+	kind, value = tree
+
+	if kind in ('alternate', 'concat'):
+		# we have some common stuff to apply to both
+
+		# first, simplify all children
+		children = map(_simplify, value)
+
+		# transform stacked nodes of like kind to one, ie. concat of concats, alternate of alternates
+		new_children = []
+		for child in children:
+			child_kind, child_value = child
+			if child_kind == kind:
+				new_children += child_value
+			else:
+				new_children.append(child)
+		children = new_children
+
+		# alternate-specific
+		if kind == 'alternate':
+			# transform an empty alternate to an empty concat
+			if not children:
+				return ('concat', [])
+
+			# remove duplicates and remove empty if any kleene is present (since kleenes all match empty)
+			new_children = []
+			has_kleene = any(child_kind == 'kleene' for (child_kind, _) in children)
+			for child in children:
+				if child in new_children: # note that "in" is an equality test, not reference test
+					continue
+				if has_kleene and child == ('concat', []):
+					continue
+				new_children.append(child)
+			children = new_children
+
+		# if only one child, just return that child since 1-child is a no-op for both kinds of node
+		if len(children) == 1:
+			return children[0]
+
+		# return modified value
+		return kind, children
+
+	elif kind == 'kleene':
+		# first, simplify the child
+		child = _simplify(value)
+
+		# if the child is also a kleene node, return it since a double-kleene is a no-op
+		child_kind, child_value = child
+		if child_kind == 'kleene':
+			return child
+		# do the same if child is empty, since '()*' -> '()'
+		if child == ('concat', []):
+			return child
+
+		# return modified value
+		return kind, child
+
+	else:
+		# literal. return unmodified
+		return tree
+
+
+def parse(data):
+	"""Return a parse tree for given regex string"""
+	tree, remainder = _parse(data)
+	if remainder:
+		assert remainder[0] == ')'
+		raise ParseError("Close parenthesis without matching open parenthesis")
+	return _simplify(tree)
+
+
+def to_text(tree):
+	"""Convert a tree back to a regex string representation.
+	Note this may be quite different to the original regex,
+	ie. to_text(parse(regex)) may not equal regex,
+	but it is a guarentee that parse(to_text(tree)) == tree
+	"""
+	wrap = lambda s: '({})'.format(s)
+
+	kind, value = tree
+	if kind == 'alternate':
+		return '|'.join(to_text(child) for child in value)
+	if kind == 'concat':
+		return ''.join(
+			wrap(to_text((child_kind, child_value)))
+			if child_kind == 'alternate'
+			else to_text((child_kind, child_value))
+			for child_kind, child_value in value
+		)
+	if kind == 'kleene':
+		child_kind, child_value = value
+		text = to_text(value)
+		return '{}*'.format(wrap(text) if child_kind in ('alternate', 'concat') else text)
+	if kind == 'literal':
+		special = {
+			'START': '^',
+			'END': '$',
+		}
+		escape = '+*?{.[()|\\'
+		if value in special:
+			return special[value]
+		if value in escape:
+			return '\\{}'.format(value)
+		return value
+	assert False, "unknown node type {!r}".format(kind)
