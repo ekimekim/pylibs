@@ -283,49 +283,57 @@ def to_text(tree):
 	assert False, "unknown node type {!r}".format(kind)
 
 
-def _to_nfa(tree, start, next_state):
-	"""Takes a parse tree, target start state and state generator.
-	Returns an end state and graph {state: {input: {set of new states}}}.
+def _to_nfa(tree, starts, next_state):
+	"""Takes a parse tree, target start states and state generator.
+	Returns a set of end states and graph {state: {input: {set of new states}}}.
 	The state generator enforces unique states.
 	"""
+	fset = lambda *args: frozenset(args)
 	kind, value = tree
 
 	if kind == 'literal':
 		end = next_state()
-		return end, {start: {value: frozenset([end])}}
+		return fset(end), {start: {value: frozenset([end])} for start in starts}
 
 	if kind == 'kleene':
-		child_end, graph = _to_nfa(value, start, next_state)
-		_nfa_merge_states(graph, child_end, start)
-		return start, graph
+		child_ends, graph = _to_nfa(value, starts, next_state)
+		# re-point each possible child end back to start
+		for end in child_ends:
+			_nfa_merge_states(graph, end, starts)
+		return starts, graph
 
 	if kind == 'concat':
-		next_start = start
+		next_starts = starts
 		graph = {}
 		for child in value:
-			next_start, child_graph = _to_nfa(child, next_start, next_state)
+			next_starts, child_graph = _to_nfa(child, next_starts, next_state)
 			graph = _nfa_merge(graph, child_graph)
-		return next_start, graph
+		return next_starts, graph
 
 	if kind == 'alternate':
 		graph = {}
-		end = next_state()
+		ends = fset()
 		for child in value:
-			child_end, child_graph = _to_nfa(child, start, next_state)
-			_nfa_merge_states(child_graph, child_end, end)
+			child_ends, child_graph = _to_nfa(child, starts, next_state)
+			ends |= child_ends
 			graph = _nfa_merge(graph, child_graph)
-		return end, graph
+		return ends, graph
 
 
-def _nfa_merge_states(graph, old, new):
-	"""Modify graph in-place so old state no longer exists, and is merged into new"""
-	# merge transitions of old state into transitions of new state
-	graph[new] = _multimap_merge(graph.get(new, {}), graph.pop(old, {}))
-	# modify references to old state to point to new
-	for inputs in graph.values():
-		for input, states in inputs.items():
-			if old in states:
-				inputs[input] = (states - {old}) | {new}
+def _nfa_merge_states(graph, old, news):
+	"""Modify graph in-place so old state no longer exists, and is copied into all new states in news"""
+	for new in news:
+		if old == new:
+			continue
+		# merge transitions of old state into transitions of new state
+		graph[new] = _multimap_merge(graph.get(new, {}), graph.get(old, {}))
+		# modify references to old state to point to new
+		for inputs in graph.values():
+			for input, states in inputs.items():
+				if old in states:
+					inputs[input] = (states - {old}) | {new}
+	if old not in news:
+		graph.pop(old, None)
 
 
 def _nfa_merge(g1, g2):
@@ -343,8 +351,8 @@ def _multimap_merge(d1, d2):
 
 
 def to_nfa(tree):
-	"""Returns (success state, graph)"""
-	return _to_nfa(tree, 0, itertools.count(1).next)
+	"""Returns (success states, graph)"""
+	return _to_nfa(tree, frozenset([0]), itertools.count(1).next)
 
 
 def _to_dfa(nfa):
@@ -364,3 +372,19 @@ def _to_dfa(nfa):
 				to_expand.add(new_state)
 
 	return dfa
+
+
+def _match(target_states, dfa, data):
+	state = frozenset([0])
+	for c in data:
+		state = dfa[state].get(c)
+		if state is None:
+			return False
+	return bool(state & target_states)
+
+
+def match(pattern, data):
+	tree = parse(pattern)
+	target_states, nfa = to_nfa(tree)
+	dfa = _to_dfa(nfa)
+	return _match(target_states, dfa, data)
