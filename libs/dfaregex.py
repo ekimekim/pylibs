@@ -1,4 +1,5 @@
 
+import itertools
 
 
 class ParseError(Exception):
@@ -280,3 +281,86 @@ def to_text(tree):
 			return '\\{}'.format(value)
 		return value
 	assert False, "unknown node type {!r}".format(kind)
+
+
+def _to_nfa(tree, start, next_state):
+	"""Takes a parse tree, target start state and state generator.
+	Returns an end state and graph {state: {input: {set of new states}}}.
+	The state generator enforces unique states.
+	"""
+	kind, value = tree
+
+	if kind == 'literal':
+		end = next_state()
+		return end, {start: {value: frozenset([end])}}
+
+	if kind == 'kleene':
+		child_end, graph = _to_nfa(value, start, next_state)
+		_nfa_merge_states(graph, child_end, start)
+		return start, graph
+
+	if kind == 'concat':
+		next_start = start
+		graph = {}
+		for child in value:
+			next_start, child_graph = _to_nfa(child, next_start, next_state)
+			graph = _nfa_merge(graph, child_graph)
+		return next_start, graph
+
+	if kind == 'alternate':
+		graph = {}
+		end = next_state()
+		for child in value:
+			child_end, child_graph = _to_nfa(child, start, next_state)
+			_nfa_merge_states(child_graph, child_end, end)
+			graph = _nfa_merge(graph, child_graph)
+		return end, graph
+
+
+def _nfa_merge_states(graph, old, new):
+	"""Modify graph in-place so old state no longer exists, and is merged into new"""
+	# merge transitions of old state into transitions of new state
+	graph[new] = _multimap_merge(graph.get(new, {}), graph.pop(old, {}))
+	# modify references to old state to point to new
+	for inputs in graph.values():
+		for input, states in inputs.items():
+			if old in states:
+				inputs[input] = (states - {old}) | {new}
+
+
+def _nfa_merge(g1, g2):
+	return {
+		state: _multimap_merge(g1.get(state, {}), g2.get(state, {}))
+		for state in set(g1) | set(g2)
+	}
+
+
+def _multimap_merge(d1, d2):
+	return {
+		key: d1.get(key, frozenset()) | d2.get(key, frozenset())
+		for key in set(d1) | set(d2)
+	}
+
+
+def to_nfa(tree):
+	"""Returns (success state, graph)"""
+	return _to_nfa(tree, 0, itertools.count(1).next)
+
+
+def _to_dfa(nfa):
+	dfa = {} # {state: {input: new state}}, states are frozensets of nfa states
+	to_expand = set([frozenset([0])])
+	expanded = set()
+
+	while to_expand:
+		state = to_expand.pop()
+		expanded.add(state)
+		inputs = {}
+		for nfa_state in state:
+			inputs = _multimap_merge(inputs, nfa.get(nfa_state, {}))
+		dfa[state] = inputs
+		for new_state in inputs.values():
+			if new_state not in to_expand | expanded:
+				to_expand.add(new_state)
+
+	return dfa
