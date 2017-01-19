@@ -283,10 +283,12 @@ def delete(head, tail, obj):
 	return head, tail[1:]
 
 @escape('\x1bOH')
+@escape('\x1b[H')
 def home(head, tail, obj):
 	return '', head+tail
 
 @escape('\x1bOF')
+@escape('\x1b[F')
 def end(head, tail, obj):
 	return head+tail, ''
 
