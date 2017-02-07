@@ -20,7 +20,7 @@ class TwitchClient(object):
 		self.oauth = oauth
 		self.client_id = client_id or self.default_client_id
 
-	def _request(self, method, endpoint, version=None, data={}, headers={}):
+	def _request(self, method, endpoint, version=None, data={}, headers={}, json=True):
 		"""Method should be a string 'get', 'post', etc.
 		Endpoint should be the path from the base url, eg. '/channels'.
 		version should be an integer.
@@ -37,7 +37,10 @@ class TwitchClient(object):
 		data_arg = 'json' if method == 'POST' else 'params'
 		response = requests.request(method, url, headers=headers, **{data_arg: data})
 		response.raise_for_status()
-		return response.json()
+		if json:
+			return response.json()
+		else:
+			return response
 
 	def request(self, method, *path, **data):
 		"""Does a http request with given method to path based on *args, eg. ('GET', 'foo', 'bar')
@@ -45,11 +48,13 @@ class TwitchClient(object):
 		Other kwargs that are special:
 			version: API version as integer.
 			headers: Dict of extra headers to use.
+			json: If false, don't try to parse a json result (returns the response object)
 		"""
 		headers = data.pop('headers', {})
 		version = data.pop('version', None)
+		json = data.pop('json', True)
 		path = urljoin(*path)
-		return self._request(method, path, version, data, headers)
+		return self._request(method, path, version, data, headers, json)
 
 	def get(self, *path, **data):
 		"""As request(), but with method GET"""
