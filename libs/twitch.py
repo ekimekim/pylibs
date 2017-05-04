@@ -4,6 +4,10 @@
 __requires__ = ['requests']
 
 
+import re
+from uuid import uuid4
+
+
 import requests
 
 
@@ -20,14 +24,14 @@ class TwitchClient(object):
 		self.oauth = oauth
 		self.client_id = client_id or self.default_client_id
 
-	def _request(self, method, endpoint, version=None, data={}, headers={}, json=True):
+	def _request(self, method, endpoint, version=None, data={}, headers={}, json=True, oauth=True):
 		"""Method should be a string 'get', 'post', etc.
 		Endpoint should be the path from the base url, eg. '/channels'.
 		version should be an integer.
 		"""
 		version_data = '' if version is None else '.v{}'.format(version)
 		headers.setdefault('Accept', 'application/vnd.twitchtv{}+json'.format(version_data))
-		if self.oauth:
+		if self.oauth and oauth:
 			headers.setdefault("Authorization", "OAuth {}".format(self.oauth))
 		headers.setdefault("Client-ID", self.client_id)
 		if endpoint.startswith('https://'):
@@ -88,6 +92,22 @@ class TwitchClient(object):
 
 	def user(self, name):
 		return User(self, name)
+
+	def cheer(self, user_id, channel_id, message, cookie):
+		"""Send a chat message involving cheers. No guarentee this will continue to work. Requires a cookie
+		for auth, can't use oauth.
+		Important: THIS WILL COST YOU BITS. The number of bits is dependent on the message text.
+		Returns new bits balance.
+		"""
+		cheer_amount = sum(map(int, [match.group(1) for match in re.finditer(r'cheer(\d+)', message)]))
+		resp = self._request('POST', 'https://api.twitch.tv/bits/events', version=4, oauth=False, data={
+			'user_id': user_id,
+			'channel_id': channel_id,
+			'amount': cheer_amount,
+			'event_id': str(uuid4()),
+			'message': message,
+		}, headers={'cookie': cookie})
+		return resp['balance']
 
 
 class HasData(object):
