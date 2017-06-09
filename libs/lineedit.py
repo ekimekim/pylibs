@@ -56,7 +56,8 @@ class LineEditing(object):
 	history_pos = 0
 
 	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout,
-				 suppress_nonprinting=True, encoding='utf-8', completion=None, gevent_handle_sigint=False):
+	             suppress_nonprinting=True, encoding='utf-8', completion=None, completion_print=True,
+	             gevent_handle_sigint=False):
 		"""input_fn overrides the default read function. Alternately, input_file specifies a
 		file to read from in the default read function.
 		input_fn should take no args.
@@ -74,6 +75,8 @@ class LineEditing(object):
 			when the user presses the completion key (tab). Word characters are as per the re module.
 			If any results are returned, the given input is replaced with the longest common prefix
 			among the results. If only one result is returned, a space is also appended.
+			If there are multiple results and the given input is already equal to the longest common prefix,
+			and completion_print=True, a list of possible completions is output.
 			An iterable may be given instead of a callable - this is equivilent to a completion_fn that returns
 			all items from that iterable which start with the input.
 		gevent_handle_sigint=True: Add some special functionality to work around an issue with KeyboardInterrupt
@@ -87,6 +90,7 @@ class LineEditing(object):
 		self.suppress_nonprinting = suppress_nonprinting
 		self.encoding = encoding
 		self.completion_fn = completion if callable(completion) else complete_from(completion)
+		self.completion_print = completion_print
 		self.history = self.history[:] # so we have a unique instance to ourselves
 		self._gevent_handle_sigint = gevent_handle_sigint
 
@@ -114,6 +118,25 @@ class LineEditing(object):
 	def get_width(self):
 		columns, rows = termsize()
 		return columns
+
+	def print_list(self, items):
+		"""A routine for pretty printing a list of items, seperated by at least two spaces,
+		taking width into account.
+		Right now this is only used by completion printing, but is exposed here for others' convenience.
+		"""
+		strtype = unicode if self.encoding else str
+		items = map(strtype, items)
+		width = self.get_width()
+		lines = []
+		sep = strtype('  ')
+		for item in items:
+			if lines:
+				new = lines[-1] + sep + item
+				if len(new) <= width:
+					lines[-1] = new
+					continue
+			lines.append(item)
+		self.write(strtype('\n').join(lines))
 
 	def refresh(self):
 		"""Display current editing line"""
@@ -318,7 +341,7 @@ def down(head, tail, obj):
 def complete(head, tail, obj):
 	if not obj.completion_fn:
 		return head, tail
-	match = re.search('(.*?)(\w+)$', head, re.UNICODE if obj.encoding else 0)
+	match = re.search('(.*?)(\S+)$', head, re.UNICODE if obj.encoding else 0)
 	if not match:
 		return head, tail
 	head, value = match.groups()
@@ -335,6 +358,9 @@ def complete(head, tail, obj):
 		if not all(len(s) > i and s[i] == c for s in rest):
 			break
 		prefix += c
+	# if already equal to prefix, print a list
+	if prefix == value and obj.completion_print:
+		obj.print_list(results)
 	return head + prefix, tail
 
 def complete_from(items):
