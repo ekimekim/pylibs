@@ -169,3 +169,53 @@ def write(input, output, file=sys.stdout):
 	"""Write items from input to given file-like object, one per line. Default stdout."""
 	for item in input:
 		file.write(str(item) + '\n')
+
+
+@conc
+def proc(input, output, args, env=None, stderr=None):
+	"""Run a subprocess, passing input to its stdin and sending its stdout to output,
+	with each item newline-seperated.
+	Args is either a string to be shell-interpreted, or a list of args.
+	stderr is either not redirected (default), mixed in with stdout (pass subprocess.STDOUT),
+	or redirected to a given file.
+	"""
+	from gevent.subprocess import Popen, PIPE, STDOUT
+
+	if isinstance(args, unicode):
+		args = args.encode('utf8')
+	if isinstance(args, str):
+		shell = True
+	else:
+		shell = False
+
+	group = gevent.pool.Group()
+
+	proc = None
+	try:
+		proc = Popen(args, shell=shell, env=env, stdin=PIPE, stdout=PIPE, stderr=stderr)
+
+		@group.spawn
+		def do_input():
+			for item in input:
+				item = item.encode('utf8') if isinstance(item, unicode) else str(item)
+				proc.stdin.write('{}\n'.format(item))
+				proc.stdin.flush()
+			proc.stdin.close()
+
+		@group.spawn
+		def do_output():
+			for line in proc.stdout:
+				output.put(line.rstrip('\n'))
+			output.close()
+
+		proc.wait()
+		group.join()
+	finally:
+		if proc and proc.poll() is None:
+			try:
+				proc.kill()
+			except OSError as e:
+				if e.errno != errno.ESRCH:
+					raise
+				# ESRCH means it died between the poll() above and here, which is fine.
+
