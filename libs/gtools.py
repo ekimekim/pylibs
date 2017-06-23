@@ -170,3 +170,22 @@ def recv_fd(sock):
 		if not r:
 			continue
 		return multiprocessing.reduction.recv_handle(sock)
+
+
+def merge_iters(*iters):
+	"""Merge a group of iterables, yielding items as soon as they are available.
+	Order of items from the same source iter is preserved but they are interleaved arbitrarily."""
+	queue = gevent.queue.Queue()
+	done = object()
+	def put(it):
+		for item in it:
+			queue.put(item)
+	putters = [gevent.spawn(put, it) for it in iters]
+	@gevent.spawn
+	def closer():
+		gevent.wait(putters)
+		queue.put(done)
+	for item in queue:
+		if item is done:
+			return
+		yield item
