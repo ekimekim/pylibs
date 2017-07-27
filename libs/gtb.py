@@ -3,9 +3,12 @@
 
 __REQUIRES__ = ['greenlet']
 
+import functools
 import gc
 import traceback
 import sys
+
+import gevent.hub
 
 from greenlet import greenlet
 
@@ -68,3 +71,14 @@ def print_greenlet_tbs():
 				tb = "<finished with exception {!r}>".format(g.exception)
 		print "===== {g!r} =====\n{tb}".format(**locals())
 
+
+def debug_loop_exit(fn):
+	"""Calls wrapped fn unchanged, but if a LoopExit occurs, will print info on all current greenlets."""
+	@functools.wraps(fn)
+	def wrapper(*args, **kwargs):
+		try:
+			return fn(*args, **kwargs)
+		except gevent.hub.LoopExit:
+			print_greenlet_tbs()
+			raise
+	return wrapper
