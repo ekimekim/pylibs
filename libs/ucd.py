@@ -60,6 +60,8 @@ class UCD(object):
 			raise KeyError(name)
 		if len(results) != 1:
 			raise ValueError("Multiple characters matching name {!r}".format(name))
+		result, = results
+		return result
 
 
 	def find(self, **criteria):
