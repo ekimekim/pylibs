@@ -6,6 +6,9 @@ import msgpack
 from bs4 import BeautifulSoup
 
 
+__REQUIRES__ = ['msgpack']
+
+
 class UCD(object):
 	"""Represents a UCD database and provides methods for lookup, etc."""
 
