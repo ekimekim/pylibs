@@ -73,6 +73,11 @@ class UnicodeNames(object):
 		for i in range(len(self.list)):
 			yield self.list[i]
 
+	def items(self):
+		"""Generator that yields all character pairs (name, value)"""
+		for i in range(len(self.list)):
+			yield self.list[i], self.list.get_value(i)
+
 
 class _ListWrapper(object):
 	"""Acts like enough of a list for bisect.bisect() to work"""
