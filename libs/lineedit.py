@@ -1,4 +1,5 @@
 
+import logging
 import signal
 import string
 import sys
@@ -25,6 +26,31 @@ def get_termattrs(fd=None, **kwargs):
 		(0, 0, 0, t.ECHO|t.ICANON|t.IEXTEN),
 		fd=fd, **kwargs
 	)
+
+
+class LoggingHandler(logging.Handler):
+	"""A logging Handler which outputs to the screen in a controlled manner.
+	Takes a LineEditing instance to output to.
+	Can be used as a context manager, replacing all handlers in the root logger on entry
+	and restoring them on exit.
+	"""
+	def __init__(self, lineedit):
+		self.lineedit = lineedit
+		super(LoggingHandler, self).__init__()
+
+	def __enter__(self):
+		logger = logging.getLogger()
+		self.old_handlers = logger.handlers
+		logger.handlers = [self]
+		return self
+
+	def __exit__(self, *exc_info):
+		logger = logging.getLogger()
+		logger.handlers = self.old_handlers
+
+	def emit(self, record):
+		msg = self.format(record)
+		self.lineedit.write(msg)
 
 
 class HiddenCursor(object):
@@ -261,10 +287,14 @@ class LineEditing(object):
 	def __enter__(self):
 		if self.active_context_mgrs:
 			return # allow re-entrance
-		for mgr_cls in self.CONTEXT_MGRS:
-			mgr = mgr_cls()
-			self.active_context_mgrs.append(mgr)
-			mgr.__enter__()
+		mgrs = [mgr_cls() for mgr_cls in self.CONTEXT_MGRS]
+		try:
+			for mgr in mgrs:
+				mgr.__enter__()
+				self.active_context_mgrs.append(mgr)
+		except BaseException:
+			self.__exit__(sys.exc_info())
+			raise
 
 	def __exit__(self, *exc_info):
 		while self.active_context_mgrs:
@@ -375,10 +405,13 @@ if __name__ == '__main__':
 	# basic test
 	import sys
 	editor = LineEditing(completion=sys.argv[1:])
+	handler = LoggingHandler(editor)
+	handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
 	try:
-		with editor:
+		with editor, handler:
 			while True:
 				line = editor.readline()
 				print repr(line)
+				exec line
 	except EOFError:
 		pass
