@@ -5,8 +5,8 @@ Creates the following structure:
 	setup.py         Contains name, version, author, dependencies, etc
 	NAME/
 		__init__.py  Empty
-		__main__.py  Configures logging, imports and runs main.main(*sys.argv[1:])
-		main.py      Contains main(*args)
+		__main__.py  Optionally monkey patches, configures logging, imports and runs main.main() with argh
+		main.py      Contains main()
 """
 
 import os
@@ -23,6 +23,7 @@ def main(
 	email=None, # default taken from git config
 	description=None, # will prompt user by default. set to '' to simply omit.
 	dependencies=None, # comma-seperated list
+	gevent=False, # enables gevent
 ):
 
 	if author is None:
@@ -31,6 +32,9 @@ def main(
 		email = cmd(['git', 'config', 'user.email']).strip()
 
 	dependencies = dependencies.split(',') if dependencies else []
+	dependencies.append('argh')
+	if gevent:
+		dependencies.append('gevent')
 
 	if description is None:
 		description = raw_input("Enter a description: ")
@@ -62,21 +66,32 @@ def main(
 
 	write(os.path.join(name, '__init__.py'))
 
+	monkey = ''
+	if gevent:
+		monkey = (
+			"\n"
+			"import gevent.monkey\n"
+			"gevent.monkey.patch_all()"
+		)
+
 	write(os.path.join(name, '__main__.py'),
+		"{monkey}",
+		"",
 		"import logging",
-		"import sys",
+		"logging.basicConfig(level='DEBUG')",
+		"",
+		"import argh",
+		"",
 		"from {name}.main import main",
 		"",
-		"logging.basicConfig(level=logging.DEBUG)",
-		"ret = main(*sys.argv[1:])",
-		"sys.exit(ret)",
-		name=name,
+		"argh.dispatch_command(main)",
+		name=name, monkey=monkey
 	)
 
 	write(os.path.join(name, "main.py"),
-		""
-		"def main(*args):",
-		"\tpass"
+		"",
+		"def main():",
+		"\tpass",
 	)
 
 
