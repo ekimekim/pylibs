@@ -63,6 +63,15 @@ class HiddenCursor(object):
 		sys.stdout.write('\x1b[?25h')
 
 
+def gevent_read_fn(input_file=sys.stdin):
+	"""Common case of a custom read fn, that reads from stdin but plays nice with gevent."""
+	from gevent.select import select
+	while True:
+		r, w, x = select([input_file], [], [])
+		if input_file in r:
+			return input_file.read(1)
+
+
 class LineEditing(object):
 	"""Intended to be used as a context manager, this class segments the screen into
 	a display part, and an editing part on the bottom line.
