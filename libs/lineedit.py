@@ -1,5 +1,6 @@
 
 import logging
+import os
 import signal
 import string
 import sys
@@ -10,6 +11,11 @@ from termhelpers import TermAttrs, termsize
 
 __REQUIRES__ = ['escapes', 'termhelpers']
 
+PY3 = not isinstance('', bytes)
+if PY3:
+	unicode = str
+
+
 def get_termattrs(fd=None, **kwargs):
 	"""Return the TermAttrs object to use. Passes args to term attrs.
 	Note it is a modification of the termios settings at the time of this call.
@@ -17,7 +23,7 @@ def get_termattrs(fd=None, **kwargs):
 	# we don't really want full raw mode, just use what's already set with just enough
 	# for what we want
 	import termios as t
-	if file is None:
+	if fd is None:
 		fd = sys.stdout
 	if hasattr(fd, 'fileno'):
 		fd = fd.fileno()
@@ -69,7 +75,8 @@ def gevent_read_fn(input_file=sys.stdin):
 	while True:
 		r, w, x = select([input_file], [], [])
 		if input_file in r:
-			return input_file.read(1)
+			# work around buffering bug with single-character reading
+			return os.read(input_file.fileno(), 1)
 
 
 class LineEditing(object):
@@ -77,7 +84,7 @@ class LineEditing(object):
 	a display part, and an editing part on the bottom line.
 	The line editor will wipe any data on the bottom line of the screen, and only the bottom line.
 	"""
-	TERMINATORS = {'\r', '\n'}
+	TERMINATORS = {b'\r', b'\n'}
 	PRINTABLE = set(string.printable) - {'\r', '\n', '\x0b', '\x0c'}
 	CONTEXT_MGRS = [get_termattrs, HiddenCursor]
 
@@ -85,7 +92,7 @@ class LineEditing(object):
 
 	head = ''
 	tail = ''
-	esc_buf = ''
+	esc_buf = b''
 
 	history = []
 	history_pos = 0
@@ -104,6 +111,7 @@ class LineEditing(object):
 			All intermediate output will be encoded with this encoding.
 			Set to None to disable this behaviour and treat all bytes as single characters.
 			Strings returned from self.readline() will be bytes if encoding is None, else unicode.
+			This option is ignored in python3 - everything is unicode, whether you like it or not.
 		completion, if given, should be a callable that takes an input string and return a list of possible completions.
 			Results generally should have the input as a prefix, but this is not a hard requirement.
 			This function will be called with the current pre-cursor input (back to the first non-word character)
@@ -159,7 +167,7 @@ class LineEditing(object):
 		taking width into account.
 		Right now this is only used by completion printing, but is exposed here for others' convenience.
 		"""
-		strtype = unicode if self.encoding else str
+		strtype = unicode if self.encoding else bytes
 		items = map(strtype, items)
 		width = self.get_width()
 		lines = []
@@ -191,7 +199,7 @@ class LineEditing(object):
 		tail = tail[:max_tail]
 
 		selected, tail = tail[0], tail[1:]
-		if self.encoding:
+		if self.encoding and not PY3:
 			head, tail, selected = [s.encode(self.encoding) for s in (head, tail, selected)]
 
 		self.output.write(
@@ -226,36 +234,48 @@ class LineEditing(object):
 
 				# read input
 				c = self.read()
+				if isinstance(c, unicode):
+					c = c.encode(self.encoding or 'utf-8')
 				if not c:
 					raise EOFError()
 				if c in self.TERMINATORS:
 					break
 				self.esc_buf += c
 
-				# check for full escape sequence
-				if self.esc_buf in ESCAPE_HANDLERS:
-					self.head, self.tail = ESCAPE_HANDLERS[self.esc_buf](self.head, self.tail, self)
-					self.esc_buf = ''
+				# on partial unicode characters, continue to buffer
+				esc_buf = self.esc_buf
+				if self.encoding or PY3:
+					try:
+						esc_buf = self.esc_buf.decode(self.encoding or 'utf-8')
+					except UnicodeDecodeError:
+						logging.debug("Got partial unicode character {!r}, continuing".format(self.esc_buf))
+						continue
 
-				# on partial escape sequences, continue to buffer
-				if any(sequence.startswith(self.esc_buf) for sequence in ESCAPE_HANDLERS):
+				# check for full escape sequence
+				if esc_buf in ESCAPE_HANDLERS:
+					logging.debug("Got esc handler {!r}".format(esc_buf))
+					self.head, self.tail = ESCAPE_HANDLERS[esc_buf](self.head, self.tail, self)
+					self.esc_buf = b''
 					continue
 
-				# on partial unicode characters, continue to buffer
-				if self.encoding:
-					try:
-						self.esc_buf = self.esc_buf.decode(self.encoding)
-					except UnicodeDecodeError:
-						continue
+				# on partial escape sequences, continue to buffer
+				if any(sequence.startswith(esc_buf) for sequence in ESCAPE_HANDLERS):
+					logging.debug("Buffer {!r} is prefix of at least one esc handler, continuing".format(esc_buf))
+					continue
+
+				logging.debug("Buffer {!r} not prefix of any esc handler, stripping and adding".format(esc_buf))
 
 				if self.suppress_nonprinting:
 					# filter non-printing chars before we add to main buffer
 					# (also allow >128 for non-ascii chars)
-					self.esc_buf = filter(lambda c: c in self.PRINTABLE or ord(c) > 128, self.esc_buf)
+					esc_buf = type(esc_buf)().join([
+						c for c in esc_buf
+						if c in self.PRINTABLE or ord(c) > 128
+					])
 
 				# flush escape buffer
-				self.head += self.esc_buf
-				self.esc_buf = ''
+				self.head += esc_buf
+				self.esc_buf = b''
 
 		except KeyboardInterrupt:
 			self.head = ''
@@ -412,15 +432,18 @@ def complete_from(items):
 
 if __name__ == '__main__':
 	# basic test
-	import sys
-	editor = LineEditing(completion=sys.argv[1:])
+	use_gevent = os.environ.get('GEVENT', '').lower() == 'true'
+	editor = LineEditing(
+		input_fn=gevent_read_fn if use_gevent else None,
+		completion=sys.argv[1:],
+		gevent_handle_sigint=use_gevent,
+	)
 	handler = LoggingHandler(editor)
 	handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
 	try:
 		with editor, handler:
 			while True:
 				line = editor.readline()
-				print repr(line)
-				exec line
+				editor.write(repr(line))
 	except EOFError:
 		pass
