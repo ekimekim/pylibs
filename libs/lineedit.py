@@ -99,7 +99,7 @@ class LineEditing(object):
 
 	def __init__(self, input_fn=None, input_file=sys.stdin, output=sys.stdout,
 	             suppress_nonprinting=True, encoding='utf-8', completion=None, completion_print=True,
-	             gevent_handle_sigint=False):
+	             complete_whole_line=False, gevent_handle_sigint=False):
 		"""input_fn overrides the default read function. Alternately, input_file specifies a
 		file to read from in the default read function.
 		input_fn should take no args.
@@ -122,6 +122,11 @@ class LineEditing(object):
 			and completion_print=True, a list of possible completions is output.
 			An iterable may be given instead of a callable - this is equivilent to a completion_fn that returns
 			all items from that iterable which start with the input.
+		complete_whole_line: If True, all characters before the cursor are passed to the completion function,
+			not just the latest word. In this case, the completion function should return (head, completions),
+			where head is a static string to leave unchanged, while completions is the list of potential suffixes
+			to head to complete as. For example, if you were completing a filepath /foo/ba and the options were
+			/foo/bar or /foo/baz, you would return ("/foo/", ["bar", "baz"]).
 		gevent_handle_sigint=True: Add some special functionality to work around an issue with KeyboardInterrupt
 			and gevent. Note this disables SIGINT from raising, but makes SIGQUIT do so instead.
 		"""
@@ -134,6 +139,7 @@ class LineEditing(object):
 		self.encoding = encoding
 		self.completion_fn = completion if callable(completion) else complete_from(completion)
 		self.completion_print = completion_print
+		self.complete_whole_line = complete_whole_line
 		self.history = self.history[:] # so we have a unique instance to ourselves
 		self._gevent_handle_sigint = gevent_handle_sigint
 
@@ -400,16 +406,20 @@ def down(head, tail, obj):
 def complete(head, tail, obj):
 	if not obj.completion_fn:
 		return head, tail
-	match = re.search('(.*?)(\S+)$', head, re.UNICODE if obj.encoding else 0)
-	if not match:
-		return head, tail
-	head, value = match.groups()
-	results = obj.completion_fn(value)
+	if obj.complete_whole_line:
+		new_head, results = obj.completion_fn(head)
+		value = ''
+	else:
+		match = re.search('(.*?)(\S+)$', head, re.UNICODE if obj.encoding else 0)
+		if not match:
+			return head, tail
+		new_head, value = match.groups()
+		results = obj.completion_fn(value)
 	if not results:
-		return head + value, tail
+		return head, tail
 	if len(results) == 1:
 		result, = results
-		return head + result + ' ', tail
+		return new_head + result + ' ', tail
 	# find common prefix
 	first, rest = results[0], results[1:]
 	prefix = ''
@@ -418,9 +428,9 @@ def complete(head, tail, obj):
 			break
 		prefix += c
 	# if already equal to prefix, print a list
-	if prefix == value and obj.completion_print:
+	if new_head + prefix == head and obj.completion_print:
 		obj.print_list(results)
-	return head + prefix, tail
+	return new_head + prefix, tail
 
 def complete_from(items):
 	"""Helper function for completion functions.
