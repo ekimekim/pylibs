@@ -3,6 +3,8 @@
 Things defined here (or returned from functions) are strings that should be printed to the terminal.
 """
 
+import random
+
 ESC = "\033" # escape character for terminal
 CSI = ESC + "[" # Control Sequence Initiator
 
@@ -50,3 +52,14 @@ PURPLE = "5"
 CYAN   = "6"
 WHITE  = "7"
 DEFAULT_COLOUR = "9"
+
+# 256-colour
+LOW_CONTRAST_COLOURS = {0, 8, 16, 17, 18, 19, 52, 232, 233, 234, 235, 236, 237, 238, 239}
+
+def colour_256(n):
+	return '8;5;{}'.format(n)
+
+def random_colour_256(seed=None):
+	rng = random if seed is None else random.Random(seed)
+	return colour_256(rng.choice(list(set(range(256)) - LOW_CONTRAST_COLOURS)))
+
