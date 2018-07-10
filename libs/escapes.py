@@ -54,7 +54,7 @@ WHITE  = "7"
 DEFAULT_COLOUR = "9"
 
 # 256-colour
-LOW_CONTRAST_COLOURS = {0, 8, 16, 17, 18, 19, 52, 232, 233, 234, 235, 236, 237, 238, 239}
+LOW_CONTRAST_COLOURS = {0, 8, 16, 17, 18, 19, 52, 53, 232, 233, 234, 235, 236, 237, 238, 239}
 
 def colour_256(n):
 	return '8;5;{}'.format(n)
