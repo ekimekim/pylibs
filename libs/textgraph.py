@@ -30,6 +30,12 @@ def _get_vertical_fill(value):
 	return unichr(0x2580 + value)
 
 
+def _get_horizontal_fill(value):
+	if value == 0:
+		return u' '
+	return unichr(0x2590 - value)
+
+
 def dots_vertical(values, ceiling=None, height=1):
 	"""Render a dotted column graph with two columns per character (using braille characters).
 	Ceiling defaults to max value. Height is how many lines high to scale the output to.
@@ -51,7 +57,7 @@ def bars_vertical(values, ceiling=None, height=1):
 	"""Render a column graph using filled square characters (8 values of resolution per line).
 	Ceiling defaults to max value. Height is how many lines high to scale the output to.
 	Returns a list of lines."""
-	cols = _vertical_to_columns(values, 8, ceiling=ceiling, height=height)
+	cols = _values_to_sequence(values, 8, ceiling=ceiling, max_chars=height)
 	lines = ['' for _ in range(height)]
 	for col in cols:
 		for h, value in enumerate(col):
@@ -59,20 +65,35 @@ def bars_vertical(values, ceiling=None, height=1):
 	return lines[::-1]
 
 
-def _vertical_to_columns(values, steps_per_char, ceiling=None, height=1):
+def _values_to_sequence(values, steps_per_char, ceiling=None, max_chars=1):
+	"""Converts a list of values to a list of sequences, where each sequence
+	encodes the value as a list of "chars" (a number from 0 to steps_per_char inclusive) such
+	that the total is the (scaled) value. The list will always be exactly max_chars long.
+	eg. if steps_per_char is 4, the value is 7, and max_chars is 3,
+	then it is encoded as [4, 3, 0].
+	If given, ceiling will scale all values such that the ceiling value is encoded
+	as [steps_per_char] * max_chars, with values exceeding it being clamped.
+	If not given, ceiling is implicitly max(values).
+	"""
 	if ceiling is None:
 		ceiling = max(values)
-	normal_ceiling = height * steps_per_char
+	normal_ceiling = max_chars * steps_per_char
 	normalized = [int(value * normal_ceiling / ceiling) for value in values]
 	cols = []
 	for value in normalized:
 		col = []
-		# Suppose steps_per_char = 4, height = 3, our max value is then 12.
+		# Suppose steps_per_char = 4, max_chars = 3, our max value is then 12.
 		# We want to encode eg. 7 as [4, 3, 0].
 		# On each iteration we put a (clamped to max 4) value down,
 		# then subtract 4 (clamped min to 0) for next iteration
-		for _ in range(height):
+		for _ in range(max_chars):
 			col.append(min(steps_per_char, value))
 			value = max(0, value - steps_per_char)
 		cols.append(col)
 	return cols
+
+
+def bars_horizontal(values, ceiling=None, width=80):
+	"""As bars_vertical but makes a row graph instead of a column graph, using left fill blocks"""
+	rows = _values_to_sequence(values, 8, ceiling=ceiling, max_chars=width)
+	return [''.join(_get_horizontal_fill(v) for v in row) for row in rows]
