@@ -97,3 +97,32 @@ def bars_horizontal(values, ceiling=None, width=80):
 	"""As bars_vertical but makes a row graph instead of a column graph, using left fill blocks"""
 	rows = _values_to_sequence(values, 8, ceiling=ceiling, max_chars=width)
 	return [''.join(_get_horizontal_fill(v) for v in row) for row in rows]
+
+
+def bars_horizontal_by_quadrant(values, ceiling=None, width=80):
+	"""As bars_horizontal but uses quadrant blocks instead of left fill blocks.
+	This means we have less value resolution (half a character instead of 1/8th),
+	but it means two values can be shown for each row."""
+	# values must be even, pad if needed
+	if len(values) % 2 == 1:
+		values = list(values) + [0]
+	rows = _values_to_sequence(values, 2, ceiling=ceiling, max_chars=width)
+	# iterate over each pair of rows
+	lines = []
+	for tops, bottoms in zip(rows[::2], rows[1::2]):
+		line = ''
+		for top, bottom in zip(tops, bottoms):
+			# top and bottom are in range 0-2, so there are 9 cases
+			line += [
+				u' ', # nothing
+				u'\u2596', # lower left only
+				u'\u2584', # bottom half
+				u'\u2598', # upper left only
+				u'\u258c', # both left
+				u'\u2599', # all but top right
+				u'\u2580', # upper half
+				u'\u259b', # all but bottom right
+				u'\u2588', # full
+			][top * 3 + bottom]
+		lines.append(line)
+	return lines
