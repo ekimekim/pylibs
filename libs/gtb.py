@@ -21,7 +21,6 @@ def get_stack(g):
 			return None # not running
 		# the current greenlet has no saved frame object, use sys._getframe() instead.
 		frame = sys._getframe()
-
 	stack = []
 	while frame:
 		stack.append(frame)
@@ -34,7 +33,6 @@ def get_tb(g):
 	"""
 	stack = get_stack(g)
 	if not stack: return
-
 	tb = []
 	for frame in stack:
 		filename = frame.f_code.co_filename
@@ -61,7 +59,9 @@ def print_greenlet_tbs():
 		if tb:
 			tb = tb.rstrip('\n')
 		else:
-			if not g.started:
+			if not hasattr(g, 'started'):
+				tb = "<unknown>"
+			elif not g.started:
 				tb = "<not started>"
 			elif not g.ready():
 				tb = "<started but not running>"
