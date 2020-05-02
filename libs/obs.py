@@ -236,7 +236,7 @@ class Source(Resource, Releasable):
 		or KeyError if none do."""
 		matches = [source for source in cls.list() if source.name == name]
 		if len(matches) > 1:
-			raise ValueError(f"Multiple sources with name {name!r}")
+			return matches[0] #raise ValueError(f"Multiple sources with name {name!r}")
 		elif not matches:
 			raise KeyError(f"No sources with name {name!r}")
 		else:
@@ -274,19 +274,6 @@ class Source(Resource, Releasable):
 				if exc_info == (None, None, None) and value != self.get_settings().to_native():
 					self.update(value)
 		return SourceSettingsManager()
-
-	def scene_item(self):
-		"""Gets the scene item associated with this source, or raises ValueError"""
-		# Note this function does not give us an owned reference, so we don't make a Scene()
-		# as this would mean we would try to release it.
-		scene = obspython.obs_scene_from_source(self.reference)
-		if scene is None:
-			raise ValueError("Not in a scene. Might be in an item group, which we can't find.")
-		# Conversely, this DOES give us an owned reference
-		item = obspython.obs_scene_find_source(scene, self.get_name())
-		if item is None:
-			raise ValueError("Could not find our name in scene")
-		return SceneItem(item)
 
 
 class Data(Resource, Releasable):
@@ -340,5 +327,18 @@ class PropertyListItem(object):
 		return lambda: self.property.get_method(f'list_item_{attr}')(self.index)
 
 
+class Scene(Resource, Releasable):
+	@classmethod
+	def current(cls):
+		"""Returns current scene"""
+		return cls(obspython.obs_scene_from_source(obspython.obs_frontend_get_current_scene()))
+
+	def items(self):
+		"""Returns list of scene items"""
+		import logging
+		return [SceneItem(item) for item in obspython.obs_scene_enum_items(self.reference)]
+
+
 class SceneItem(Resource, Releasable):
-	pass
+	def _release(self):
+		pass
