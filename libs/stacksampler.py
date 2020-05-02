@@ -55,3 +55,30 @@ def install(filepath=None, interval=0.005, prometheus_top_n=None):
 	signal.signal(signal.SIGUSR1, output)
 	# deliver the first signal in INTERVAL seconds
 	signal.setitimer(signal.ITIMER_VIRTUAL, interval)
+
+
+if __name__ == '__main__':
+	# Simple test
+	import sys, random
+
+	if len(sys.argv) != 3:
+		raise Exception("Usage: $0 OUTFILE INTERVAL")
+	outfile, interval = sys.argv[1:]
+	interval = float(interval)
+
+	def both(n):
+		if n:
+			if random.random() < .25:
+				less(n-1)
+			else:
+				more(n-1)
+
+	def less(n):
+		both(n)
+
+	def more(n):
+		both(n)
+
+	install(outfile, interval=interval)
+	while True:
+		both(50)
