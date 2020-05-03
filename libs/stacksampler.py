@@ -74,6 +74,8 @@ class StackSampler(object):
 	We could use user+sys time but that leads to interrupting syscalls,
 	which may affect performance, and we care mostly about user time anyway.
 
+	Call start() to begin sampling.
+
 	Call report() to get a sequence of (stack, count). Note this does NOT reset the count,
 	counts are cumulative over the entire period stacks are collected.
 	NOTE: Stack counts include all their children.
@@ -87,8 +89,10 @@ class StackSampler(object):
 		self.counts = SiftCounter()
 		self.interval = interval
 		signal.signal(signal.SIGVTALRM, self.sample)
+
+	def start(self):
 		# deliver the first signal in INTERVAL seconds
-		signal.setitimer(signal.ITIMER_VIRTUAL, interval)
+		signal.setitimer(signal.ITIMER_VIRTUAL, self.interval)
 
 	def sample(self, signum, frame):
 		"""SIGVTALRM handler. Record stack and increment appropriate counter."""
@@ -146,7 +150,7 @@ def install(filepath=None, interval=0.005, top=None):
 	We could use user+sys time but that leads to interrupting syscalls,
 	which may affect performance, and we care mostly about user time anyway.
 	"""
-	sampler = None
+	sampler = StackSampler(interval=interval)
 
 	def finish():
 		sampler.stop()
@@ -179,7 +183,37 @@ def install(filepath=None, interval=0.005, top=None):
 	atexit.register(finish)
 	signal.signal(signal.SIGUSR1, output)
 
+	sampler.start()
+
+
+def prometheus(interval=0.005, top=200):
+	"""Samples the stack every INTERVAL seconds of user time,
+	exporting approximate time spent in up to TOP unique stacks,
+	under the flamegraph_sample_ms{stack} counter metric.
+	The limit is intended to avoid a large number of rare or irrelevant stacks from blowing out
+	prometheus storage, or making scrape collection take too long.
+	We could use user+sys time but that leads to interrupting syscalls,
+	which may affect performance, and we care mostly about user time anyway.
+	"""
+	# lazy import preventing unnessecary dependency
+	from prometheus_client.core import CounterMetricFamily, REGISTRY
+
 	sampler = StackSampler(interval=interval)
+
+	class FlamegraphCollector(object):
+		def collect(self):
+			metrics = CounterMetricFamily("flamegraph_sample",
+				"Counts approximate number of milliseconds of user cpu time spent "
+				"in a given function stack with format 'FUNCTION(MODULE);FUNCTION(MODULE);...'",
+				labels=["stack"],
+			)
+			for stack, count in sampler.report(top=top):
+				metrics.add_metric([stack], count)
+			return [metrics]
+
+	REGISTRY.register(FlamegraphCollector())
+
+	sampler.start()
 
 
 if __name__ == '__main__':
