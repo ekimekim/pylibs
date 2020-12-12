@@ -156,7 +156,7 @@ class LineEditing(object):
 				if self._readline_greenlet:
 					self._readline_greenlet.kill(KeyboardInterrupt, block=False)
 			signal.signal(signal.SIGQUIT, _sigquit)
-			gevent.signal(signal.SIGINT, _sigint)
+			gevent.signal_handler(signal.SIGINT, _sigint)
 
 	def read(self):
 		"""Read a single character of input, or '' (or EOFError) on EOF.
