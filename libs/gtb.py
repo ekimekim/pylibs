@@ -69,7 +69,7 @@ def print_greenlet_tbs():
 				tb = "<finished with value {!r}>".format(g.value)
 			else:
 				tb = "<finished with exception {!r}>".format(g.exception)
-		print "===== {g!r} =====\n{tb}".format(**locals())
+		print("===== {g!r} =====\n{tb}".format(**locals()))
 
 
 def debug_loop_exit(fn):
